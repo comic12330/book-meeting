@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.meetingroom.mapper.NoticeMapper">
+
+    <sql id="Base_Column_List">
+        id, title, content, publisher_id, publish_time, is_show
+    </sql>
+
+    <select id="selectShow" resultType="com.example.meetingroom.entity.Notice">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM notice
+        WHERE is_show = 1
+        ORDER BY publish_time DESC
+    </select>
+
+    <select id="selectAll" resultType="com.example.meetingroom.entity.Notice">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM notice
+        ORDER BY is_show ASC, publish_time DESC
+    </select>
+
+    <select id="findById" resultType="com.example.meetingroom.entity.Notice">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM notice
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.example.meetingroom.entity.Notice"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO notice (title, content, publisher_id, is_show)
+        VALUES (#{title}, #{content}, #{publisherId}, #{isShow})
+    </insert>
+
+    <update id="update" parameterType="com.example.meetingroom.entity.Notice">
+        UPDATE notice
+        SET title   = #{title},
+            content = #{content},
+            is_show = #{isShow}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM notice WHERE id = #{id}
+    </delete>
+</mapper>

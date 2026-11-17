@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.meetingroom.mapper.MeetingRoomMapper">
+
+    <sql id="Base_Column_List">
+        id, room_name, capacity, location, equipment, status, remark, create_time
+    </sql>
+
+    <select id="selectByCondition" parameterType="com.example.meetingroom.dto.RoomQueryDTO"
+            resultType="com.example.meetingroom.entity.MeetingRoom">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM meeting_room
+        <where>
+            <if test="roomName != null and roomName != ''">
+                AND room_name LIKE CONCAT('%', #{roomName}, '%')
+            </if>
+            <if test="location != null and location != ''">
+                AND location LIKE CONCAT('%', #{location}, '%')
+            </if>
+            <if test="minCapacity != null">
+                AND capacity &gt;= #{minCapacity}
+            </if>
+            <if test="equipment != null and equipment != ''">
+                AND FIND_IN_SET(#{equipment}, equipment)
+            </if>
+            <if test="status != null">
+                AND status = #{status}
+            </if>
+        </where>
+        ORDER BY id ASC
+    </select>
+
+    <select id="findById" resultType="com.example.meetingroom.entity.MeetingRoom">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM meeting_room
+        WHERE id = #{id}
+    </select>
+
+    <select id="lockById" resultType="java.lang.Long">
+        SELECT id FROM meeting_room WHERE id = #{id} FOR UPDATE
+    </select>
+
+    <insert id="insert" parameterType="com.example.meetingroom.entity.MeetingRoom"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO meeting_room (room_name, capacity, location, equipment, status, remark)
+        VALUES (#{roomName}, #{capacity}, #{location}, #{equipment}, #{status}, #{remark})
+    </insert>
+
+    <update id="update" parameterType="com.example.meetingroom.entity.MeetingRoom">
+        UPDATE meeting_room
+        SET room_name = #{roomName},
+            capacity  = #{capacity},
+            location  = #{location},
+            equipment = #{equipment},
+            status    = #{status},
+            remark    = #{remark}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM meeting_room WHERE id = #{id}
+    </delete>
+</mapper>

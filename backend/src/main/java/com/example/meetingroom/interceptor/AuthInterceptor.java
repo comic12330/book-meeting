@@ -1,0 +1,51 @@
+package com.example.meetingroom.interceptor;
+
+import com.example.meetingroom.common.BusinessException;
+import com.example.meetingroom.common.LoginUser;
+import com.example.meetingroom.common.UserContext;
+import com.example.meetingroom.util.TokenUtil;
+import org.springframework.http.HttpMethod;
+import org.springframework.stereotype.Component;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+/**
+ * 登录拦截器：解析请求头 Authorization 中的令牌，写入用户上下文。
+ * 同时完成管理端 /api/admin/** 的角色校验，避免越权。
+ */
+@Component
+public class AuthInterceptor implements HandlerInterceptor {
+
+    @Resource
+    private TokenUtil tokenUtil;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if (HttpMethod.OPTIONS.matches(request.getMethod()) || !(handler instanceof HandlerMethod)) {
+            return true;
+        }
+
+        String header = request.getHeader("Authorization");
+        String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : header;
+
+        LoginUser user = tokenUtil.parse(token);
+        if (user == null) {
+            throw new BusinessException(401, "登录已失效，请重新登录");
+        }
+        UserContext.set(user);
+
+        if (request.getRequestURI().startsWith("/api/admin/") && !Integer.valueOf(1).equals(user.getRole())) {
+            throw new BusinessException(403, "该操作仅管理员可执行");
+        }
+        return true;
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        UserContext.clear();
+    }
+}

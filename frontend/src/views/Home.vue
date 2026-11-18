@@ -28,14 +28,6 @@
           <el-button class="quick" @click="$router.push('/my-books')">
             查看我的预定
           </el-button>
-          <el-descriptions :column="1" border size="small" class="desc">
-            <el-descriptions-item label="当前账号">
-              {{ user.username }}
-            </el-descriptions-item>
-            <el-descriptions-item label="角色">
-              {{ user.role === 1 ? '管理员' : '普通用户' }}
-            </el-descriptions-item>
-          </el-descriptions>
         </el-card>
       </el-col>
     </el-row>
@@ -43,13 +35,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Bell } from '@element-plus/icons-vue'
 import { getNotices } from '../api'
-import { getUser } from '../utils/auth'
 
 const notices = ref([])
-const user = computed(() => getUser() || {})
 
 onMounted(async () => {
   const res = await getNotices()
@@ -96,7 +86,7 @@ onMounted(async () => {
   margin: 0 0 10px;
 }
 
-.desc {
-  margin-top: 16px;
+.quick:last-child {
+  margin-bottom: 0;
 }
 </style>

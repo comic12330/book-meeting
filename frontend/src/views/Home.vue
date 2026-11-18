@@ -7,7 +7,7 @@
             <span class="page-title">系统公告</span>
           </template>
           <el-empty v-if="notices.length === 0" description="暂无公告" />
-          <div v-for="item in notices" :key="item.id" class="notice">
+          <div v-for="item in notices" :key="item.id" class="notice" @click="openDetail(item)">
             <div class="notice-head">
               <el-icon color="#409eff"><Bell /></el-icon>
               <span class="notice-title">{{ item.title }}</span>
@@ -31,6 +31,14 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="detailVisible" :title="current.title" width="600px">
+      <div class="detail-time">发布于 {{ current.publishTime }}</div>
+      <div class="detail-content">{{ current.content }}</div>
+      <template #footer>
+        <el-button type="primary" @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -40,6 +48,13 @@ import { Bell } from '@element-plus/icons-vue'
 import { getNotices } from '../api'
 
 const notices = ref([])
+const detailVisible = ref(false)
+const current = ref({ title: '', content: '', publishTime: '' })
+
+function openDetail(item) {
+  current.value = item
+  detailVisible.value = true
+}
 
 onMounted(async () => {
   const res = await getNotices()
@@ -49,8 +64,16 @@ onMounted(async () => {
 
 <style scoped>
 .notice {
-  padding: 12px 0;
+  padding: 12px 10px;
+  margin: 0 -10px;
   border-bottom: 1px dashed #ebeef5;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.notice:hover {
+  background: #f5f8ff;
 }
 
 .notice:last-child {
@@ -63,9 +86,14 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.notice:hover .notice-title {
+  color: #409eff;
+}
+
 .notice-title {
   font-size: 14px;
   font-weight: 500;
+  transition: color 0.15s;
 }
 
 .notice-time {
@@ -74,11 +102,35 @@ onMounted(async () => {
   color: #909399;
 }
 
+/* 列表只显示两行，超出用省略号截断，点击看全文 */
 .notice-body {
   margin-top: 6px;
   font-size: 13px;
   color: #606266;
   line-height: 1.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.detail-time {
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 12.5px;
+  color: #909399;
+}
+
+.detail-content {
+  max-height: 52vh;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.9;
+  color: #303133;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .quick {

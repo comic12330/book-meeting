@@ -16,6 +16,7 @@ const routes = [
       { path: 'profile', component: () => import('../views/Profile.vue'), meta: { title: '个人资料' } },
       { path: 'admin/rooms', component: () => import('../views/admin/AdminRoom.vue'), meta: { title: '会议室管理', admin: true } },
       { path: 'admin/books', component: () => import('../views/admin/AdminBook.vue'), meta: { title: '预定审核', admin: true } },
+      { path: 'admin/users', component: () => import('../views/admin/AdminUser.vue'), meta: { title: '用户管理', admin: true } },
       { path: 'admin/notices', component: () => import('../views/admin/AdminNotice.vue'), meta: { title: '公告管理', admin: true } }
     ]
   },

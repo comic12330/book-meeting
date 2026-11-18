@@ -22,6 +22,38 @@
         WHERE id = #{id}
     </select>
 
+    <select id="selectByCondition" parameterType="com.example.meetingroom.dto.UserQueryDTO"
+            resultType="com.example.meetingroom.entity.User">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM `user`
+        <where>
+            <if test="username != null and username != ''">
+                AND username LIKE CONCAT('%', #{username}, '%')
+            </if>
+            <if test="realName != null and realName != ''">
+                AND real_name LIKE CONCAT('%', #{realName}, '%')
+            </if>
+            <if test="role != null">
+                AND role = #{role}
+            </if>
+            <if test="status != null">
+                AND status = #{status}
+            </if>
+        </where>
+        ORDER BY id ASC
+    </select>
+
+    <select id="countOtherActiveAdmin" resultType="int">
+        SELECT COUNT(1)
+        FROM `user`
+        WHERE role = 1
+          AND status = 1
+        <if test="excludeId != null">
+            AND id &lt;&gt; #{excludeId}
+        </if>
+    </select>
+
     <insert id="insert" parameterType="com.example.meetingroom.entity.User"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO `user` (username, password, real_name, phone, role, status)
@@ -35,9 +67,24 @@
         WHERE id = #{id}
     </update>
 
+    <update id="updateByAdmin" parameterType="com.example.meetingroom.entity.User">
+        UPDATE `user`
+        SET real_name = #{realName},
+            phone     = #{phone},
+            role      = #{role},
+            status    = #{status}
+        WHERE id = #{id}
+    </update>
+
     <update id="updatePassword">
         UPDATE `user`
         SET password = #{password}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE `user`
+        SET status = #{status}
         WHERE id = #{id}
     </update>
 </mapper>

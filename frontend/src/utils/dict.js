@@ -17,6 +17,16 @@ export const ROOM_STATUS = {
   1: { text: '启用', type: 'success' }
 }
 
+export const USER_ROLE = {
+  0: { text: '普通用户', type: 'info' },
+  1: { text: '管理员', type: 'warning' }
+}
+
+export const USER_STATUS = {
+  0: { text: '已停用', type: 'info' },
+  1: { text: '正常', type: 'success' }
+}
+
 export function equipmentText(value) {
   if (!value) {
     return '无'

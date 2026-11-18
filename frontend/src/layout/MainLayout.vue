@@ -29,6 +29,10 @@
             <el-icon><DocumentChecked /></el-icon>
             <span>预定审核</span>
           </el-menu-item>
+          <el-menu-item index="/admin/users">
+            <el-icon><UserFilled /></el-icon>
+            <span>用户管理</span>
+          </el-menu-item>
           <el-menu-item index="/admin/notices">
             <el-icon><Bell /></el-icon>
             <span>公告管理</span>

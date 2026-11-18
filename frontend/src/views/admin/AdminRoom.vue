@@ -13,7 +13,7 @@
       </div>
 
       <el-table :data="list" border stripe v-loading="loading">
-        <el-table-column prop="id" label="ID" width="70" align="center" />
+        <el-table-column type="index" label="序号" width="70" align="center" :index="indexMethod" />
         <el-table-column prop="roomName" label="会议室" min-width="120" />
         <el-table-column prop="location" label="位置" min-width="140" />
         <el-table-column prop="capacity" label="容纳人数" width="100" align="center" />
@@ -100,6 +100,9 @@ const rules = {
   capacity: [{ required: true, message: '请输入容纳人数', trigger: 'change' }],
   location: [{ required: true, message: '请输入所在位置', trigger: 'blur' }]
 }
+
+// 序号跨页连续：第 2 页从 11 开始，而不是回到 1
+const indexMethod = (i) => (query.pageNum - 1) * query.pageSize + i + 1
 
 async function load(page) {
   if (page) {

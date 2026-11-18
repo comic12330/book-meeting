@@ -15,7 +15,7 @@
       </div>
 
       <el-table :data="list" border stripe v-loading="loading">
-        <el-table-column prop="id" label="ID" width="70" align="center" />
+        <el-table-column type="index" label="序号" width="70" align="center" :index="indexMethod" />
         <el-table-column label="申请人" width="110">
           <template #default="{ row }">{{ row.realName }}</template>
         </el-table-column>
@@ -78,6 +78,9 @@ const query = reactive({ pageNum: 1, pageSize: 10, status: 0, keyword: '' })
 const rejectVisible = ref(false)
 const rejectMsg = ref('')
 const currentRow = ref(null)
+
+// 序号跨页连续：第 2 页从 11 开始，而不是回到 1
+const indexMethod = (i) => (query.pageNum - 1) * query.pageSize + i + 1
 
 async function load(page) {
   if (page) {

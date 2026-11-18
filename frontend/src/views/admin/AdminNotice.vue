@@ -6,7 +6,7 @@
       </div>
 
       <el-table :data="list" border stripe v-loading="loading">
-        <el-table-column prop="id" label="ID" width="70" align="center" />
+        <el-table-column type="index" label="序号" width="70" align="center" />
         <el-table-column prop="title" label="标题" min-width="180" />
         <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
         <el-table-column prop="publishTime" label="发布时间" width="170" />

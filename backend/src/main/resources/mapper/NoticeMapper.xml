@@ -19,7 +19,7 @@
         SELECT
         <include refid="Base_Column_List"/>
         FROM notice
-        ORDER BY is_show ASC, publish_time DESC
+        ORDER BY is_show DESC, publish_time DESC
     </select>
 
     <select id="findById" resultType="com.example.meetingroom.entity.Notice">

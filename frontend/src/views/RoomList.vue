@@ -76,6 +76,14 @@
 </template>
 
 <script setup>
+/**
+ * 会议室列表与预定提交。
+ *
+ * 列表只显示启用中的会议室（由后端 pageForUser 强制 status=1，前端不需要再判断）。
+ * 本页的校验只承担「让用户少走一趟」的作用：必填、结束晚于开始、人数不超容量。
+ * 时段是否与已有预定冲突、开始时间是否已经过去，前端一律不判断——
+ * 那属于必须由后端把关的规则，前端算不算都不影响最终结果。
+ */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRooms, submitBook } from '../api'
@@ -147,12 +155,16 @@ function openBook(room) {
 
 async function onSubmit() {
   await bookFormRef.value.validate()
+  // 两个时间都是 "YYYY-MM-DD HH:mm:ss" 格式的字符串，字典序与时间先后一致，
+  // 所以可以直接比较字符串，不必转成 Date 对象。
+  // 这里只拦住「结束不晚于开始」这一种，跨天场景是合法的（如 23:00 到次日 02:00）。
   if (bookForm.endTime <= bookForm.startTime) {
     ElMessage.warning('结束时间必须晚于开始时间')
     return
   }
   submitting.value = true
   try {
+    // 提交后不在这里判断冲突：后端校验失败时会返回具体时段，由 axios 拦截器统一弹出提示
     await submitBook(bookForm)
     ElMessage.success('预定申请已提交，等待管理员审核')
     dialogVisible.value = false

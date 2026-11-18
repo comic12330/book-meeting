@@ -1,3 +1,10 @@
+/**
+ * 接口封装：按后端路径分组，一个函数对应一个接口。
+ *
+ * 分成 auth / user（个人中心）/ rooms / notices（用户端）
+ * 与 admin*（管理端）两组，管理端函数统一以 admin 开头，
+ * 便于在页面里一眼看出这个调用是否要求管理员身份。
+ */
 import request from './request'
 
 export const login = (data) => request.post('/auth/login', data)

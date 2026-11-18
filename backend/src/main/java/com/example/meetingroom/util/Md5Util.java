@@ -14,6 +14,7 @@ public final class Md5Util {
     private Md5Util() {
     }
 
+    /** 把明文密码转成 32 位小写十六进制摘要，入库前调用 */
     public static String encode(String raw) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -28,6 +29,10 @@ public final class Md5Util {
         }
     }
 
+    /**
+     * 校验明文与库中摘要是否匹配。用 equalsIgnoreCase 兼容大小写不同的历史数据，
+     * stored 为 null 时直接返回 false，避免空指针。
+     */
     public static boolean verify(String raw, String stored) {
         return stored != null && stored.equalsIgnoreCase(encode(raw));
     }

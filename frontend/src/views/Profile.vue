@@ -46,6 +46,12 @@
 </template>
 
 <script setup>
+/**
+ * 个人资料：查看并修改姓名、手机号，以及修改密码。
+ *
+ * 只提交 realName 与 phone 两个字段，与后端 updateProfile 的可改范围一致；
+ * 角色、账号这些字段即使传上去也不会被写入。
+ */
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -87,6 +93,8 @@ async function onChangePassword() {
   changing.value = true
   try {
     await changePassword(pwd)
+    // 后端没有让旧令牌失效的机制（需要 token_version 字段），
+    // 所以由前端主动清掉本地登录态并要求重新登录，保证改完密码后旧令牌不再被使用
     ElMessage.success('密码已修改，请重新登录')
     clearAuth()
     router.push('/login')

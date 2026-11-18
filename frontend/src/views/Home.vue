@@ -43,6 +43,13 @@
 </template>
 
 <script setup>
+/**
+ * 系统首页：公告列表 + 快速入口。
+ *
+ * 公告只显示两行摘要（样式里用 -webkit-line-clamp: 2 截断），点击弹窗看全文，
+ * 避免一条上千字的公告把首页撑得很长。
+ * 数据源接口本身只返回 is_show = 1 的记录，隐藏的公告不会传到这里。
+ */
 import { ref, onMounted } from 'vue'
 import { Bell } from '@element-plus/icons-vue'
 import { getNotices } from '../api'
@@ -51,6 +58,7 @@ const notices = ref([])
 const detailVisible = ref(false)
 const current = ref({ title: '', content: '', publishTime: '' })
 
+// 列表与弹窗共用同一条数据，只是展示范围不同，不需要再请求一次接口
 function openDetail(item) {
   current.value = item
   detailVisible.value = true

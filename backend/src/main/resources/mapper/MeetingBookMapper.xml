@@ -4,6 +4,13 @@
 <mapper namespace="com.example.meetingroom.mapper.MeetingBookMapper">
 
     <!--
+        预定表数据访问。
+        本文件承担系统的核心业务判定：countConflict 是「同一会议室同一时间段内只能存在一条
+        有效预定记录」这一约束的唯一实现，提交与审核两个环节都调用它，区别只在传入的状态集合。
+        解析见各自的注释。
+    -->
+
+    <!--
       核心业务：会议室时段冲突判定
       判定条件：同一 room_id 下存在状态有效的记录（0 待审核 / 1 已通过），
                 且「已有记录开始时间 < 新预定结束时间」且「已有记录结束时间 > 新预定开始时间」。
@@ -24,6 +31,7 @@
         </if>
     </select>
 
+    <!-- 提交预定：状态由服务层固定为 0（待审核），不接受前端指定 -->
     <insert id="insert" parameterType="com.example.meetingroom.entity.MeetingBook"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO meeting_book (user_id, room_id, start_time, end_time, purpose,
@@ -32,6 +40,7 @@
                 #{participantNum}, #{status})
     </insert>
 
+    <!-- 审核与取消前的取数：拿到的是数据库当前状态，用来判断这条记录是否还能操作 -->
     <select id="findById" resultType="com.example.meetingroom.entity.MeetingBook">
         SELECT id, user_id, room_id, start_time, end_time, purpose, participant_num,
                status, audit_msg, audit_time, create_time
@@ -66,6 +75,7 @@
         WHERE b.id = #{id}
     </select>
 
+    <!-- 用户端：条件固定为本人，只允许再按状态筛选，无法通过改参数查出他人记录 -->
     <select id="selectMyBooks" resultType="com.example.meetingroom.vo.BookVO">
         SELECT
         <include refid="Book_VO_Columns"/>
@@ -79,6 +89,10 @@
         ORDER BY b.create_time DESC
     </select>
 
+    <!--
+        管理端：三个筛选条件都是可选的，关键字同时匹配申请人姓名、账号与会议用途。
+        排序为状态升序，status 数值越小越靠前，所以待审核（0）排在最前，管理员打开页面即可处理待办。
+    -->
     <select id="selectForAdmin" resultType="com.example.meetingroom.vo.BookVO">
         SELECT
         <include refid="Book_VO_Columns"/>
@@ -101,10 +115,16 @@
         ORDER BY b.status ASC, b.create_time DESC
     </select>
 
+    <!-- 删除会议室前的引用检查：存在任何预定记录（含已取消）都不允许物理删除 -->
     <select id="countByRoom" resultType="int">
         SELECT COUNT(1) FROM meeting_book WHERE room_id = #{roomId}
     </select>
 
+    <!--
+        状态流转统一走这一条 UPDATE：审核（1/2）与取消（3）都调用它。
+        审核意见与审核时间一并落库，保证「谁、在什么时候、以什么理由处理」可以追溯。
+        取消时这两项传 null，因为取消不是审核动作。
+    -->
     <update id="updateStatus">
         UPDATE meeting_book
         SET status     = #{status},

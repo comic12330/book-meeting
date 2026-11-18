@@ -79,6 +79,13 @@
 </template>
 
 <script setup>
+/**
+ * 管理端会议室维护：分页查询、新增、编辑、删除。
+ *
+ * 与用户端列表的区别是不按状态过滤，停用的会议室在这里也能看到并改回启用。
+ * 删除按钮不做前端拦截，直接交给后端判断是否有历史预定，
+ * 因为「有没有预定记录」只有数据库知道，前端算不出来。
+ */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminGetRooms, adminSaveRoom, adminUpdateRoom, adminDeleteRoom } from '../../api'
@@ -138,6 +145,8 @@ function openEdit(row) {
 
 async function onSubmit() {
   await formRef.value.validate()
+  // 设备在表单里是多选框数组，入库前拼成逗号分隔字符串，
+  // 与后端条件的 FIND_IN_SET(#{equipment}, equipment) 相对应
   const payload = { ...form, equipment: equipmentList.value.join(',') }
   saving.value = true
   try {
@@ -156,6 +165,7 @@ async function onSubmit() {
 }
 
 async function onDelete(row) {
+  // 提示里先说明限制，让管理员知道失败时该改用「停用」而不是反复重试
   await ElMessageBox.confirm(`确定删除「${row.roomName}」吗？已有预定记录的会议室不能删除。`, '提示', {
     type: 'warning'
   })

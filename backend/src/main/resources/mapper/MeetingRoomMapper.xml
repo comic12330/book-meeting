@@ -3,10 +3,22 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.meetingroom.mapper.MeetingRoomMapper">
 
+    <!--
+        会议室表数据访问。
+        重点是 lockById：它是审核环节串行化的关键，用 SELECT ... FOR UPDATE 锁住会议室行，
+        让同一会议室的并发审核排队执行，避免两条时段重叠的申请被同时通过。
+    -->
+
     <sql id="Base_Column_List">
         id, room_name, capacity, location, equipment, status, remark, create_time
     </sql>
 
+    <!--
+        条件查询：所有条件都是可选的。
+        equipment 用 FIND_IN_SET 精确匹配逗号分隔列表中的某一项，
+        不用 LIKE，避免查「投影仪」时把「投影仪支架」也算进来。
+        status 由调用方决定是否传入：用户端固定传 1，管理端不传。
+    -->
     <select id="selectByCondition" parameterType="com.example.meetingroom.dto.RoomQueryDTO"
             resultType="com.example.meetingroom.entity.MeetingRoom">
         SELECT
@@ -39,16 +51,23 @@
         WHERE id = #{id}
     </select>
 
+    <!--
+        行锁：必须在事务中调用，锁持有到事务提交为止。
+        审核通过前先锁会议室行，同一会议室的并发审核因此排成队列：
+        后一个事务要等前一个提交后才能继续，此时它读到的已经是「已有一条通过的记录」。
+    -->
     <select id="lockById" resultType="java.lang.Long">
         SELECT id FROM meeting_room WHERE id = #{id} FOR UPDATE
     </select>
 
+    <!-- 新增会议室，回填自增主键到实体 -->
     <insert id="insert" parameterType="com.example.meetingroom.entity.MeetingRoom"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO meeting_room (room_name, capacity, location, equipment, status, remark)
         VALUES (#{roomName}, #{capacity}, #{location}, #{equipment}, #{status}, #{remark})
     </insert>
 
+    <!-- 整条覆盖更新。历史预定不跟着变，会议室信息以编辑后的为准，不回改已发生的记录 -->
     <update id="update" parameterType="com.example.meetingroom.entity.MeetingRoom">
         UPDATE meeting_room
         SET room_name = #{roomName},
@@ -60,6 +79,10 @@
         WHERE id = #{id}
     </update>
 
+    <!--
+        物理删除。调用前 RoomService 已检查过该会议室有无预定记录，
+        有引用时会先抛业务异常引导改为停用，所以能走到这里的都是无引用数据。
+    -->
     <delete id="deleteById">
         DELETE FROM meeting_room WHERE id = #{id}
     </delete>

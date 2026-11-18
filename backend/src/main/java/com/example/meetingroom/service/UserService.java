@@ -24,6 +24,17 @@ import java.util.List;
 
 /**
  * 用户与登录认证。
+ * <p>
+ * 分两块职责：
+ * <ul>
+ *   <li><b>认证与自助</b>：登录、注册、查看与修改个人资料、修改密码；</li>
+ *   <li><b>管理端用户管理</b>：新建账号、编辑、启用停用、重置密码。</li>
+ * </ul>
+ * 两条贯穿全类的规则：
+ * <ol>
+ *   <li>密码一律 MD5 加密后入库，任何返回给前端的对象都要把 password 置空；</li>
+ *   <li>不允许删除用户，只能停用——预定表通过外键引用用户，删人会让历史预定失去归属。</li>
+ * </ol>
  */
 @Service
 public class UserService {
@@ -34,6 +45,14 @@ public class UserService {
     @Resource
     private TokenUtil tokenUtil;
 
+    /**
+     * 登录校验，成功后签发令牌。
+     * <p>
+     * 校验顺序：账号密码 → 账号是否被停用。密码用 MD5 比对，库里不存明文。
+     *
+     * @return 令牌与用户基本信息的组合，前端保存令牌并在后续请求的请求头中携带
+     * @throws BusinessException 账号不存在、密码错误或账号已停用时抛出
+     */
     public LoginVO login(LoginDTO dto) {
         User user = userMapper.findByUsername(dto.getUsername().trim());
         if (user == null || !Md5Util.verify(dto.getPassword(), user.getPassword())) {
@@ -52,6 +71,11 @@ public class UserService {
         return vo;
     }
 
+    /**
+     * 自助注册。新用户的角色固定为 0（普通用户）、状态固定为 1（可用）。
+     * <p>
+     * 角色与状态不从表单接收——否则任何人都能通过构造请求把自己注册成管理员。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void register(RegisterDTO dto) {
         String username = dto.getUsername().trim();
@@ -68,6 +92,9 @@ public class UserService {
         userMapper.insert(user);
     }
 
+    /**
+     * 查询本人资料。返回前把密码置空，避免哈希值随响应体泄漏到浏览器。
+     */
     public User getProfile(Long userId) {
         User user = userMapper.findById(userId);
         if (user == null) {
@@ -77,6 +104,12 @@ public class UserService {
         return user;
     }
 
+    /**
+     * 修改本人资料，只允许改真实姓名与手机号。
+     * <p>
+     * 这里用新建对象只带可改字段的做法，而不是把整个表单覆盖上去：
+     * 表单里即使出现 role、status、username 也会被忽略，防止借资料修改接口提权。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void updateProfile(Long userId, User form) {
         User user = userMapper.findById(userId);
@@ -93,6 +126,12 @@ public class UserService {
         userMapper.updateProfile(update);
     }
 
+    /**
+     * 修改本人密码，必须先校验原密码。
+     * <p>
+     * 本项目改密后不会让旧令牌失效（需给 user 表加 token_version 字段才能做到），
+     * 旧令牌仍可用满有效期，这一点在报告里作为改进方向说明。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void changePassword(Long userId, PasswordDTO dto) {
         User user = userMapper.findById(userId);
@@ -107,6 +146,10 @@ public class UserService {
 
     // ==================== 管理端用户管理 ====================
 
+    /**
+     * 管理端：分页查询用户，支持按账号、姓名、角色与状态筛选。
+     * 列表里每条记录同样把密码置空后再返回。
+     */
     public PageResult<User> pageForAdmin(UserQueryDTO query) {
         PageHelper.startPage(query.safePageNum(), query.safePageSize());
         List<User> list = userMapper.selectByCondition(query);
@@ -116,6 +159,14 @@ public class UserService {
         return PageResult.of(pageInfo.getTotal(), list);
     }
 
+    /**
+     * 管理员新建账号。
+     * <p>
+     * 与自助注册的区别：管理员可以直接指定角色和状态，初始密码由管理员设定
+     * （不设固定默认值，避免全站新账号共用一个弱口令）。
+     *
+     * @return 新账号的主键
+     */
     @Transactional(rollbackFor = Exception.class)
     public Long createByAdmin(UserSaveDTO dto) {
         String username = dto.getUsername().trim();
@@ -136,6 +187,15 @@ public class UserService {
         return user.getId();
     }
 
+    /**
+     * 管理员编辑账号：可改姓名、手机号、角色与状态，账号与密码不在此处修改。
+     * <p>
+     * 两条防呆规则都指向同一个风险——把管理端入口关死：
+     * <ol>
+     *   <li>不能停用当前登录的账号，否则提交成功的那一刻自己就掉线了；</li>
+     *   <li>不能把最后一个启用的管理员降级为普通用户，否则没有人能再进管理端。</li>
+     * </ol>
+     */
     @Transactional(rollbackFor = Exception.class)
     public void updateByAdmin(Long id, UserSaveDTO dto) {
         User exist = requireUser(id);
@@ -159,6 +219,12 @@ public class UserService {
         userMapper.updateByAdmin(update);
     }
 
+    /**
+     * 启用或停用账号。停用后该账号的旧令牌会立刻失效，
+     * 因为拦截器每次请求都回查数据库状态，见 AuthInterceptor。
+     *
+     * @param status 0 停用，1 启用，其它值一律拒绝
+     */
     @Transactional(rollbackFor = Exception.class)
     public void updateStatusByAdmin(Long id, Integer status) {
         if (status == null || (status != 0 && status != 1)) {
@@ -180,6 +246,9 @@ public class UserService {
         userMapper.updatePassword(id, Md5Util.encode(dto.getNewPassword()));
     }
 
+    /**
+     * 按主键取用户，查不到直接抛业务异常，作为写操作前的存在性断言。
+     */
     private User requireUser(Long id) {
         User user = userMapper.findById(id);
         if (user == null) {

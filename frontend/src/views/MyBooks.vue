@@ -45,6 +45,13 @@
 </template>
 
 <script setup>
+/**
+ * 我的预定列表。
+ *
+ * 只查本人记录：请求不带 userId，后端按令牌取当前用户，前端改参数也查不到别人的。
+ * 「取消」按钮只在状态为待审核（0）或已通过（1）时显示，
+ * 但时间是否已经过去前端不判断——已开始的会议由后端拦下并给出提示。
+ */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMyBooks, cancelBook } from '../api'
@@ -70,7 +77,9 @@ async function load(page) {
 }
 
 async function onCancel(row) {
+  // 取消是状态变更，先二次确认再发请求，避免误点
   await ElMessageBox.confirm(`确定取消「${row.roomName}」的预定吗？`, '提示', { type: 'warning' })
+  // 取消成功后该时段立即释放，可以重新被别人预定
   await cancelBook(row.id)
   ElMessage.success('已取消')
   load()

@@ -8,8 +8,10 @@ import java.util.List;
 
 public interface MeetingRoomMapper {
 
+    /** 条件查询，条件为空时返回全部；status 是否限定由调用方决定 */
     List<MeetingRoom> selectByCondition(RoomQueryDTO query);
 
+    /** 按主键取会议室，不存在时由服务层抛业务异常 */
     MeetingRoom findById(@Param("id") Long id);
 
     /**
@@ -19,9 +21,12 @@ public interface MeetingRoomMapper {
      */
     Long lockById(@Param("id") Long id);
 
+    /** 新增会议室，回填自增主键 */
     int insert(MeetingRoom room);
 
+    /** 整条覆盖更新 */
     int update(MeetingRoom room);
 
+    /** 物理删除，调用前必须确认该会议室没有预定引用 */
     int deleteById(@Param("id") Long id);
 }

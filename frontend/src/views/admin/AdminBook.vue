@@ -64,6 +64,13 @@
 </template>
 
 <script setup>
+/**
+ * 管理端预定审核。
+ *
+ * 页面状态默认筛选「待审核」（status = 0），因为管理员打开这个页面主要是处理待办，
+ * 想看全部时清空下拉框即可。
+ * 后端返回的排序本身也是待审核优先，两者配合让待办始终在最前面。
+ */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminGetBooks, adminAudit } from '../../api'
@@ -73,6 +80,7 @@ const loading = ref(false)
 const auditing = ref(false)
 const list = ref([])
 const total = ref(0)
+// status 默认 0（待审核），进入页面直接看到待办
 const query = reactive({ pageNum: 1, pageSize: 10, status: 0, keyword: '' })
 
 const rejectVisible = ref(false)
@@ -97,6 +105,8 @@ async function load(page) {
 }
 
 async function onAudit(row, status) {
+  // 提示文案里特意写明「系统会再次校验时段冲突」：
+  // 通过操作可能因为时段已被别的通过记录占用而失败，这不是异常，是设计如此。
   await ElMessageBox.confirm(
     `确定为「${row.realName}」的「${row.roomName}」预定通过吗？系统会再次校验时段冲突。`,
     '审核确认',
@@ -104,6 +114,7 @@ async function onAudit(row, status) {
   )
   auditing.value = true
   try {
+    // 冲突时后端返回 code=1001 并附带具体时段，由 axios 拦截器弹出，这里不重复处理
     await adminAudit(row.id, { status, auditMsg: '审核通过' })
     ElMessage.success('已通过')
     load()

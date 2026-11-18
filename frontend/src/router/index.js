@@ -29,14 +29,18 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
+  // 登录页与注册页无需登录态
   if (to.meta.public) {
     next()
     return
   }
+  // 没有令牌直接送回登录页
   if (!getToken()) {
     next('/login')
     return
   }
+  // 管理页要求角色为管理员。
+  // 这一层只是避免普通用户看到不该看的界面，接口权限仍由后端拦截器把关。
   if (to.meta.admin && !isAdmin()) {
     ElMessage.error('该页面仅管理员可访问')
     next('/home')

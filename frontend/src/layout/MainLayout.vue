@@ -57,6 +57,12 @@
 </template>
 
 <script setup>
+/**
+ * 主框架：左侧菜单 + 顶部栏 + 路由出口。
+ *
+ * 管理菜单用 v-if 按角色隐藏，这只是避免普通用户看到点不动的入口，
+ * 不是权限控制——把 role 改掉能骗出菜单，但调用 /api/admin/** 时会被后端拦截器拒掉。
+ */
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
@@ -65,11 +71,13 @@ import { getUser, clearAuth, isAdmin } from '../utils/auth'
 const route = useRoute()
 const router = useRouter()
 
+// 用户信息存在 localStorage，刷新页面后仍然可用，不必每次请求后端
 const user = computed(() => getUser() || {})
 const isAdminUser = computed(() => isAdmin())
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => route.meta.title || '')
 
+// 退出只清本地登录态：令牌无状态，服务端没有会话要销毁
 async function logout() {
   await ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' })
   clearAuth()

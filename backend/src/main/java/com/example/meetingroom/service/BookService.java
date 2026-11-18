@@ -25,7 +25,18 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 预定业务：提交、取消、审核。核心是会议室时段冲突校验。
+ * 预定业务：提交、取消、查询与审核。
+ * <p>
+ * 本类的核心是「同一会议室同一时间段内只能存在一条有效预定记录」这一业务约束。
+ * 按任务书要求，该约束不依赖前端时间控件，而是在后端两个环节各校验一次：
+ * <ul>
+ *   <li><b>提交环节</b> {@link #submit}：把「待审核」也算作占用，重叠的申请当场拒绝，
+ *       保证进入待审队列的申请互不冲突；</li>
+ *   <li><b>审核环节</b> {@link #audit}：只把「已通过」算作占用，并对会议室行加锁串行化，
+ *       保证两条时段重叠的待审申请中只有一条能通过。</li>
+ * </ul>
+ * 两个环节用的是同一个判定方法 {@link #checkConflict}，差异只在参与判定的状态集合，
+ * 见 {@link #OCCUPIED_ON_SUBMIT} 与 {@link #OCCUPIED_ON_AUDIT}。
  */
 @Service
 public class BookService {
@@ -50,8 +61,19 @@ public class BookService {
     private MeetingRoomMapper roomMapper;
 
     /**
-     * 提交预定。校验顺序：会议室可用性 → 时间合法性 → 容量 → 时段冲突。
-     * 冲突校验在提交环节执行一次。
+     * 提交预定申请，写入一条状态为 0（待审核）的记录。
+     * <p>
+     * 校验顺序按「代价从低到高」排列：会议室是否存在且启用 → 时间区间是否合法 →
+     * 参会人数是否超过容量 → 时段是否冲突。前三个只需读一条会议室记录或纯内存判断，
+     * 冲突校验要扫预定表，放在最后可以避免为明显非法的请求多查一次库。
+     * <p>
+     * 冲突校验在提交环节执行一次，参与判定的状态是「待审核 + 已通过」，
+     * 详见 {@link #OCCUPIED_ON_SUBMIT}。
+     *
+     * @param dto    提交表单，已由 BookSubmitDTO 上的注解做过格式校验
+     * @param userId 当前登录用户，由拦截器写入上下文，不接受前端传入
+     * @return 新插入记录的主键
+     * @throws BusinessException 会议室不存在或已停用、时间非法、超容量、时段冲突时抛出
      */
     @Transactional(rollbackFor = Exception.class)
     public Long submit(BookSubmitDTO dto, Long userId) {
@@ -82,8 +104,19 @@ public class BookService {
     }
 
     /**
-     * 审核预定。通过时执行第二次冲突校验：
-     * 防止两条「待审核」记录时段重叠、先被通过的那条占位后，后一条依然被通过。
+     * 审核预定，把状态从 0（待审核）改为 1（通过）或 2（驳回）。
+     * <p>
+     * 通过时执行第二次冲突校验，这是全套约束的最后一道闸门：
+     * 提交环节虽然已经拦过重叠申请，但两个用户可以并发提交，各自读到「无冲突」后都插入成功，
+     * 于是待审队列里可能出现两条时段重叠的申请。此时靠审核环节保证只有一条能通过——
+     * 先到的那条把会议室占住，后到的这条在这里被拒绝。
+     * <p>
+     * 驳回不涉及占用，因此不校验冲突，但必须填写理由，便于申请人知道该改什么。
+     *
+     * @param bookId 待审核的预定记录主键
+     * @param dto    审核结果，status 只能是 1 或 2，驳回时 auditMsg 必填
+     * @throws BusinessException 审核结果非法、记录不存在、记录已被处理、驳回未填理由、
+     *                           或时段已被其他通过的预定占用时抛出
      */
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long bookId, AuditDTO dto) {
@@ -114,6 +147,17 @@ public class BookService {
                 LocalDateTime.now());
     }
 
+    /**
+     * 取消预定，把记录状态置为 3（已取消）。
+     * <p>
+     * 状态为 3 的记录不再参与冲突判定，所以取消等同于释放该时段。
+     * 只允许取消「待审核」与「已通过」的记录，并且必须在会议开始之前操作，
+     * 已经开始的会议不能事后取消，否则历史记录会失去意义。
+     *
+     * @param bookId 预定记录主键
+     * @param userId 当前登录用户 ID，用于判断是否为本人预定
+     * @throws BusinessException 记录不存在、非本人且非管理员、状态不允许、会议已开始时抛出
+     */
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long bookId, Long userId) {
         MeetingBook book = bookMapper.findById(bookId);
@@ -133,18 +177,34 @@ public class BookService {
         bookMapper.updateStatus(bookId, 3, null, null);
     }
 
+    /**
+     * 用户端：分页查询本人的预定记录，可按状态筛选，按提交时间倒序。
+     * <p>
+     * 查询条件固定为当前登录用户 ID，即使前端伪造 userId 也查不到他人记录。
+     */
     public PageResult<BookVO> pageMyBooks(BookQueryDTO query, Long userId) {
         PageHelper.startPage(query.safePageNum(), query.safePageSize());
         List<BookVO> list = bookMapper.selectMyBooks(userId, query.getStatus());
         return PageResult.of(new PageInfo<>(list).getTotal(), list);
     }
 
+    /**
+     * 管理端：分页查询全部预定，支持按状态、会议室与关键字（申请人或会议用途）筛选。
+     * <p>
+     * 排序为「状态升序 + 提交时间倒序」（见 MeetingBookMapper.xml），
+     * 待审核的记录排在最前，管理员打开页面即可优先处理待办。
+     */
     public PageResult<BookVO> pageForAdmin(BookQueryDTO query) {
         PageHelper.startPage(query.safePageNum(), query.safePageSize());
         List<BookVO> list = bookMapper.selectForAdmin(query.getStatus(), query.getRoomId(), query.getKeyword());
         return PageResult.of(new PageInfo<>(list).getTotal(), list);
     }
 
+    /**
+     * 查询单条预定的详情，附带会议室名称、位置与申请人姓名。
+     * <p>
+     * 越权保护：只有本人和管理员可以查看，防止通过遍历 id 拿到他人的会议安排。
+     */
     public BookVO getVO(Long id) {
         BookVO vo = bookMapper.findVOById(id);
         if (vo == null) {

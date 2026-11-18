@@ -112,6 +112,14 @@
 </template>
 
 <script setup>
+/**
+ * 管理端用户管理：列表、新增、编辑、启用停用、重置密码。
+ *
+ * 前端拦截的两件事是「提示」而非「限制」：
+ * 停用当前登录账号、把最后一个管理员降级，这两条真正的判定都在后端 UserService，
+ * 这里只负责把后果说清楚，避免管理员误操作后自己被关在门外。
+ * 本项目不提供删除用户，需要「移除」时用停用代替。
+ */
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -212,6 +220,8 @@ async function onSubmit() {
   saving.value = true
   try {
     if (form.id) {
+      // 编辑只提交这五个字段，不带 password：
+      // 密码有独立的重置入口，免得编辑资料时把密码覆盖成空
       await adminUpdateUser(form.id, {
         username: form.username,
         realName: form.realName,
@@ -234,6 +244,8 @@ async function onSubmit() {
 async function onToggleStatus(row) {
   const enable = row.status !== 1
   const action = enable ? '启用' : '停用'
+  // 停用的提示里写明「已登录的会话也会立即失效」，这是实际行为：
+  // 拦截器每次请求都回查账号状态，不是等令牌过期才生效
   await ElMessageBox.confirm(
     enable
       ? `确定启用「${row.realName}（${row.username}）」吗？启用后该账号可正常登录。`

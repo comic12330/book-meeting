@@ -28,6 +28,12 @@ public class TokenUtil {
     @Value("${meeting.token.expire-seconds}")
     private long expireSeconds;
 
+    /**
+     * 签发令牌：把用户标识、角色与过期时间拼成载荷，再对载荷做 HMAC 签名。
+     * 令牌本身不加密，只保证不可篡改——载荷里不放密码等敏感信息。
+     *
+     * @param expireSeconds 有效期取自配置文件 meeting.token.expire-seconds
+     */
     public String create(Long userId, String username, Integer role) {
         long expireAt = System.currentTimeMillis() + expireSeconds * 1000L;
         String payload = userId + "|" + username + "|" + role + "|" + expireAt;

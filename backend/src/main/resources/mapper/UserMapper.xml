@@ -44,6 +44,11 @@
         ORDER BY id ASC
     </select>
 
+    <!--
+        统计「除指定用户之外，还有几个启用的管理员」。
+        返回 0 说明该用户是最后一名启用的管理员，此时不允许把它降级或停用，
+        否则系统将没有任何人能进入管理端。
+    -->
     <select id="countOtherActiveAdmin" resultType="int">
         SELECT COUNT(1)
         FROM `user`
@@ -60,6 +65,10 @@
         VALUES (#{username}, #{password}, #{realName}, #{phone}, #{role}, #{status})
     </insert>
 
+    <!--
+        自助修改资料：SET 子句只有真实姓名与手机号两列。
+        即使请求体里塞了 role 或 status，这里也不会写入，等于在 SQL 层再挡一次提权。
+    -->
     <update id="updateProfile" parameterType="com.example.meetingroom.entity.User">
         UPDATE `user`
         SET real_name = #{realName},
@@ -67,6 +76,10 @@
         WHERE id = #{id}
     </update>
 
+    <!--
+        管理端编辑账号：可改姓名、手机号、角色、状态。
+        用户名与密码不在这里修改，改密走 updatePassword 这条独立语句。
+    -->
     <update id="updateByAdmin" parameterType="com.example.meetingroom.entity.User">
         UPDATE `user`
         SET real_name = #{realName},
@@ -76,6 +89,7 @@
         WHERE id = #{id}
     </update>
 
+    <!-- 改密：调用方已把新密码加密，这里收到的就是最终入库的哈希值 -->
     <update id="updatePassword">
         UPDATE `user`
         SET password = #{password}

@@ -3,10 +3,17 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.meetingroom.mapper.NoticeMapper">
 
+    <!--
+        公告表数据访问。
+        公告有两个可见范围：首页只取 is_show = 1（selectShow），管理端取全部（selectAll）。
+        过滤放在 SQL 层完成，隐藏的公告根本不会传到浏览器。
+    -->
+
     <sql id="Base_Column_List">
         id, title, content, publisher_id, publish_time, is_show
     </sql>
 
+    <!-- 首页用：只取展示中的公告，按发布时间倒序，最新的在最前 -->
     <select id="selectShow" resultType="com.example.meetingroom.entity.Notice">
         SELECT
         <include refid="Base_Column_List"/>
@@ -15,6 +22,10 @@
         ORDER BY publish_time DESC
     </select>
 
+    <!--
+        管理端用：取全部公告。
+        排序先按 is_show 降序，展示中的排在前面，已下架到期的沉到底部留档；同组内按发布时间倒序。
+    -->
     <select id="selectAll" resultType="com.example.meetingroom.entity.Notice">
         SELECT
         <include refid="Base_Column_List"/>
@@ -35,6 +46,11 @@
         VALUES (#{title}, #{content}, #{publisherId}, #{isShow})
     </insert>
 
+    <!--
+        编辑公告只覆盖标题、内容与展示状态三项。
+        发布人和发布时间不在 SET 子句里，因为它们是「谁在什么时候发布」的事实，
+        重复编辑不应把发布时间刷新成最后一次修改时间。
+    -->
     <update id="update" parameterType="com.example.meetingroom.entity.Notice">
         UPDATE notice
         SET title   = #{title},

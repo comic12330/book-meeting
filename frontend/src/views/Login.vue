@@ -2,7 +2,6 @@
   <div class="login-wrap">
     <el-card class="login-card" shadow="always">
       <h2 class="title">会议室预定系统</h2>
-      <p class="sub">基于 Spring Boot + Vue 的会议室资源管理平台</p>
       <el-form ref="formRef" :model="form" :rules="rules" size="large">
         <el-form-item prop="username">
           <el-input v-model="form.username" placeholder="请输入账号" :prefix-icon="User" />
@@ -19,8 +18,6 @@
         <span>还没有账号？</span>
         <el-button link type="primary" @click="$router.push('/register')">立即注册</el-button>
       </div>
-      <el-alert class="tip" type="info" :closable="false"
-                title="默认账号：admin / 123456（管理员），zhangsan / 123456（普通用户）" />
     </el-card>
   </div>
 </template>
@@ -37,7 +34,8 @@ const router = useRouter()
 const formRef = ref(null)
 const loading = ref(false)
 
-const form = reactive({ username: '', password: '' })
+// 账号框预填管理员账号，密码留空由使用者输入
+const form = reactive({ username: 'admin', password: '' })
 
 const rules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
@@ -73,16 +71,9 @@ async function onSubmit() {
 }
 
 .title {
-  margin: 8px 0 4px;
+  margin: 12px 0 24px;
   font-size: 20px;
   font-weight: 500;
-  text-align: center;
-}
-
-.sub {
-  margin: 0 0 24px;
-  font-size: 12px;
-  color: #909399;
   text-align: center;
 }
 
@@ -95,9 +86,5 @@ async function onSubmit() {
   text-align: center;
   font-size: 13px;
   color: #606266;
-}
-
-.tip {
-  margin-top: 14px;
 }
 </style>

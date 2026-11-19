@@ -1,22 +1,14 @@
 <template>
   <div class="page">
     <el-card shadow="never">
-      <el-alert class="tip" type="info" :closable="false" show-icon
-                title="这些参数保存在 sys_config 表中，保存后立即生效，无需重启服务。" />
-
       <el-table :data="list" border stripe v-loading="loading">
-        <el-table-column prop="configName" label="参数名称" min-width="150" />
-        <el-table-column prop="configKey" label="参数键" min-width="180">
-          <template #default="{ row }"><code class="key">{{ row.configKey }}</code></template>
-        </el-table-column>
-        <el-table-column label="当前值" width="130" align="center">
+        <el-table-column prop="configName" label="参数名称" min-width="220" />
+        <el-table-column label="当前值" width="160" align="center">
           <template #default="{ row }">
             <strong>{{ row.configValue }}</strong>
             <span v-if="row.unit" class="unit">{{ row.unit }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="说明" min-width="240" show-overflow-tooltip />
-        <el-table-column prop="updateTime" label="最后修改" width="170" />
         <el-table-column label="操作" width="90" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click="openEdit(row)">修改</el-button>
@@ -27,9 +19,6 @@
 
     <el-dialog v-model="dialogVisible" :title="`修改参数：${form.configName}`" width="480px">
       <el-form label-width="90px">
-        <el-form-item label="参数键">
-          <el-input :model-value="form.configKey" disabled />
-        </el-form-item>
         <el-form-item label="参数值">
           <el-input-number v-if="form.valueType === 'INT'" v-model="numberValue"
                            :min="form.minValue" :max="form.maxValue" controls-position="right" />
@@ -41,7 +30,7 @@
           <span class="range">
             {{ form.valueType === 'INT'
               ? `${form.minValue} ~ ${form.maxValue}${form.unit ? ' ' + form.unit : ''}`
-              : 'HH:mm，起始时间须早于最晚开始时间' }}
+              : '起始时间须早于最晚开始时间' }}
           </span>
         </el-form-item>
         <el-form-item label="说明">
@@ -127,16 +116,6 @@ onMounted(() => load())
 </script>
 
 <style scoped>
-.tip {
-  margin-bottom: 14px;
-}
-
-.key {
-  font-family: Consolas, Monaco, monospace;
-  font-size: 12px;
-  color: #606266;
-}
-
 .unit {
   margin-left: 6px;
   font-size: 12px;

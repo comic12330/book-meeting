@@ -14,29 +14,29 @@ package com.example.meetingroom.common;
 public enum SysConfigKey {
 
     /** 单次预定最长时长，单位小时 */
-    BOOKING_MAX_HOURS("booking.max-hours", "单次预定最长时长", "小时", "72",
-            ValueType.INT, 1, 720, 10,
-            "单笔预定的起止时间跨度上限，超出则拒绝提交"),
+    BOOKING_MAX_HOURS("booking.max-hours", "单次预定最长时长", "小时", "8",
+            ValueType.INT, 1, 12, 10,
+            "一场会议最多能占用会议室多久，超出需拆成多次申请"),
 
     /** 最多可以提前多少天预定 */
     BOOKING_MAX_ADVANCE_DAYS("booking.max-advance-days", "最多提前预定天数", "天", "30",
-            ValueType.INT, 0, 365, 20,
-            "开始时间距今天数超过该值时拒绝提交，防止长期占位"),
+            ValueType.INT, 0, 90, 20,
+            "员工最多能提前多久预约，设为 30 表示只能选 30 天以内的日期；设为 0 表示只接受当天预约"),
 
     /** 每日最早可预定时刻 */
-    BOOKING_DAILY_START("booking.daily-start", "每日可预定起始时间", "", "07:00",
+    BOOKING_DAILY_START("booking.daily-start", "每日可预定起始时间", "", "08:00",
             ValueType.TIME, 0, 0, 30,
-            "开始时间早于该时刻的申请会被拒绝，格式 HH:mm"),
+            "每天最早从几点起可以使用会议室，早于该时刻的申请不予受理"),
 
     /** 每日最晚可开始的时刻（结束时间可跨天，不受此限制） */
-    BOOKING_DAILY_END("booking.daily-end", "每日最晚开始时间", "", "23:00",
+    BOOKING_DAILY_END("booking.daily-end", "每日最晚开始时间", "", "22:00",
             ValueType.TIME, 0, 0, 40,
-            "开始时间晚于该时刻的申请会被拒绝；结束时间允许跨到次日，不受此限"),
+            "每天最晚可以从几点起使用会议室；跨夜会议也须在此刻之前开始，结束时间不限"),
 
     /** 会议室容纳人数上限，防止录入离谱数值 */
-    ROOM_MAX_CAPACITY("room.max-capacity", "会议室容纳人数上限", "人", "500",
-            ValueType.INT, 1, 10000, 50,
-            "新增或编辑会议室时，容纳人数不得超过该值");
+    ROOM_MAX_CAPACITY("room.max-capacity", "会议室容纳人数上限", "人", "200",
+            ValueType.INT, 1, 1000, 50,
+            "登记会议室时允许填写的最大人数，用于拦住明显录错的数字");
 
     /** 参数值的类型，决定校验方式与前端输入控件 */
     public enum ValueType {

@@ -1,6 +1,8 @@
 package com.example.meetingroom.service;
 
+import com.example.meetingroom.annotation.LogOperation;
 import com.example.meetingroom.common.BusinessException;
+import com.example.meetingroom.common.OperationType;
 import com.example.meetingroom.common.UserContext;
 import com.example.meetingroom.entity.Notice;
 import com.example.meetingroom.mapper.NoticeMapper;
@@ -45,6 +47,7 @@ public class NoticeService {
      * @return 新公告的主键
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.NOTICE_CREATE, target = "#notice.title")
     public Long save(Notice notice) {
         if (notice.getTitle() == null || notice.getTitle().trim().isEmpty()) {
             throw new BusinessException(400, "请填写公告标题");
@@ -63,6 +66,7 @@ public class NoticeService {
      * 编辑公告。发布人与发布时间不在可改范围内，只更新标题、内容和展示状态。
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.NOTICE_UPDATE, target = "#notice.title")
     public void update(Long id, Notice notice) {
         if (noticeMapper.findById(id) == null) {
             throw new BusinessException(1001, "公告不存在");
@@ -78,10 +82,22 @@ public class NoticeService {
      * 若只是想从首页撤下但保留内容，应编辑并把 isShow 置为 0，而不是删除。
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.NOTICE_DELETE, target = "describe(#id)")
     public void delete(Long id) {
         if (noticeMapper.findById(id) == null) {
             throw new BusinessException(1001, "公告不存在");
         }
         noticeMapper.deleteById(id);
+    }
+
+    /**
+     * 供操作日志取对象的可读描述，返回公告标题。
+     * <p>
+     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#id)")}），
+     * 删除只拿到主键，光记 id 事后看不出删的是哪条公告。查不到时返回 null，切面会忽略。
+     */
+    public String describe(Long id) {
+        Notice notice = noticeMapper.findById(id);
+        return notice == null ? null : notice.getTitle();
     }
 }

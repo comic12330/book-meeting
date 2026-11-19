@@ -1,6 +1,8 @@
 package com.example.meetingroom.service;
 
+import com.example.meetingroom.annotation.LogOperation;
 import com.example.meetingroom.common.BusinessException;
+import com.example.meetingroom.common.OperationType;
 import com.example.meetingroom.common.PageResult;
 import com.example.meetingroom.common.UserContext;
 import com.example.meetingroom.common.UserRole;
@@ -169,6 +171,7 @@ public class UserService {
      * @return 新账号的主键
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.USER_CREATE, target = "#dto.realName")
     public Long createByAdmin(UserSaveDTO dto) {
         String username = dto.getUsername().trim();
         if (userMapper.findByUsername(username) != null) {
@@ -198,6 +201,7 @@ public class UserService {
      * </ol>
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.USER_UPDATE, target = "#dto.realName")
     public void updateByAdmin(Long id, UserSaveDTO dto) {
         User exist = requireUser(id);
         // 允许改自己的资料，但不能在编辑里顺手把自己停用，否则当场失去入口
@@ -227,6 +231,7 @@ public class UserService {
      * @param status 0 停用，1 启用，其它值一律拒绝
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.USER_STATUS, target = "describe(#id)")
     public void updateStatusByAdmin(Long id, Integer status) {
         if (status == null
                 || (status != UserRole.STATUS_DISABLED && status != UserRole.STATUS_ENABLED)) {
@@ -241,11 +246,27 @@ public class UserService {
 
     /**
      * 管理员重置他人口令：不校验原密码，执行者身份已由 /api/admin/** 的拦截器校验。
+     * <p>
+     * 操作日志只记「重置了谁的密码」，新密码与 MD5 摘要都不会进入日志——
+     * 日志是给事后追查用的，不能反过来变成泄露口令的入口。
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.USER_PASSWORD_RESET, target = "describe(#id)")
     public void resetPasswordByAdmin(Long id, ResetPasswordDTO dto) {
         requireUser(id);
         userMapper.updatePassword(id, Md5Util.encode(dto.getNewPassword()));
+    }
+
+    /**
+     * 供操作日志取对象的可读描述，形如「张三（zhangsan）」。
+     * <p>
+     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#id)")}），
+     * 启用停用、重置密码这些方法只拿到主键，光记 id 事后看不出动的是谁。
+     * 查不到时返回 null，切面会忽略，不影响业务。
+     */
+    public String describe(Long id) {
+        User user = userMapper.findById(id);
+        return user == null ? null : user.getRealName() + "（" + user.getUsername() + "）";
     }
 
     /**

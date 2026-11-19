@@ -1,6 +1,8 @@
 package com.example.meetingroom.service;
 
+import com.example.meetingroom.annotation.LogOperation;
 import com.example.meetingroom.common.BusinessException;
+import com.example.meetingroom.common.OperationType;
 import com.example.meetingroom.common.PageResult;
 import com.example.meetingroom.common.RoomStatus;
 import com.example.meetingroom.common.SysConfigKey;
@@ -83,6 +85,7 @@ public class RoomService {
      * @return 新插入记录的主键
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.ROOM_CREATE, target = "#dto.roomName")
     public Long save(RoomSaveDTO dto) {
         checkCapacity(dto.getCapacity());
         MeetingRoom room = toEntity(dto);
@@ -97,6 +100,7 @@ public class RoomService {
      * 因为历史记录反映的是当时的实际情况，不应随会议室信息变动而被追溯修改。
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.ROOM_UPDATE, target = "#dto.roomName")
     public void update(Long id, RoomSaveDTO dto) {
         get(id);
         checkCapacity(dto.getCapacity());
@@ -107,8 +111,13 @@ public class RoomService {
 
     /**
      * 删除前先确认没有历史预定记录：有则引导改为「停用」，避免破坏历史数据。
+     * <p>
+     * 日志的对象描述用 {@code get(#id).roomName} 换出名称：删除只拿到主键，
+     * 光记一个 id 事后看不出删的是哪间会议室。这里多一次按主键取数，
+     * 对低频的管理操作可以接受。
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.ROOM_DELETE, target = "get(#id).roomName")
     public void delete(Long id) {
         get(id);
         int used = bookMapper.countByRoom(id);

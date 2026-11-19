@@ -25,6 +25,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 
 /**
@@ -73,8 +74,7 @@ public class OperationLogAspect {
             return pjp.proceed();
         }
 
-        MethodSignature signature = (MethodSignature) pjp.getSignature();
-        String target = resolveTarget(annotation.target(), signature.getMethod(), pjp.getArgs());
+        String target = resolveTarget(annotation.target(), pjp);
         String ip = resolveIp();
 
         Object result;
@@ -133,14 +133,24 @@ public class OperationLogAspect {
         }
     }
 
-    /** SpEL 解析操作对象描述，取不到就留空，不抛出去 */
-    private String resolveTarget(String expression, java.lang.reflect.Method method, Object[] args) {
+    /**
+     * SpEL 解析操作对象描述，取不到就留空，不抛出去。
+     * <p>
+     * 上下文把被代理对象设为根对象，因此表达式里除了取参数（{@code #dto.roomName}），
+     * 还能调用业务对象的公开方法——删除、取消这类只拿到主键的方法靠它换出可读名称
+     * （如 {@code get(#id).roomName}）。这类多一次按主键取数，只发生在低频的管理操作上。
+     * <p>
+     * 参数名依赖编译时的 {@code -parameters}（Spring Boot parent 默认开启）。
+     * 若项目改成不带参数名编译，这里会解析失败、描述留空，但日志本身照常写入。
+     */
+    private String resolveTarget(String expression, ProceedingJoinPoint pjp) {
         if (expression == null || expression.trim().isEmpty()) {
             return null;
         }
         try {
-            MethodBasedEvaluationContext context =
-                    new MethodBasedEvaluationContext(null, method, args, NAME_DISCOVERER);
+            Method method = ((MethodSignature) pjp.getSignature()).getMethod();
+            MethodBasedEvaluationContext context = new MethodBasedEvaluationContext(
+                    pjp.getTarget(), method, pjp.getArgs(), NAME_DISCOVERER);
             Object value = PARSER.parseExpression(expression).getValue(context);
             if (value == null) {
                 return null;

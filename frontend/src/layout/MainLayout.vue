@@ -41,6 +41,10 @@
             <el-icon><Tools /></el-icon>
             <span>系统参数</span>
           </el-menu-item>
+          <el-menu-item index="/admin/logs">
+            <el-icon><Document /></el-icon>
+            <span>操作日志</span>
+          </el-menu-item>
         </template>
       </el-menu>
     </el-aside>

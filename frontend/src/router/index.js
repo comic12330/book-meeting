@@ -18,7 +18,8 @@ const routes = [
       { path: 'admin/books', component: () => import('../views/admin/AdminBook.vue'), meta: { title: '预定审核', admin: true } },
       { path: 'admin/users', component: () => import('../views/admin/AdminUser.vue'), meta: { title: '用户管理', admin: true } },
       { path: 'admin/configs', component: () => import('../views/admin/AdminConfig.vue'), meta: { title: '系统参数', admin: true } },
-      { path: 'admin/notices', component: () => import('../views/admin/AdminNotice.vue'), meta: { title: '公告管理', admin: true } }
+      { path: 'admin/notices', component: () => import('../views/admin/AdminNotice.vue'), meta: { title: '公告管理', admin: true } },
+      { path: 'admin/logs', component: () => import('../views/admin/AdminLog.vue'), meta: { title: '操作日志', admin: true } }
     ]
   },
   { path: '/:pathMatch(.*)*', redirect: '/home' }

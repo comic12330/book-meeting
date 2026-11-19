@@ -43,3 +43,6 @@ export const adminResetPassword = (id, data) => request.put(`/admin/users/${id}/
 export const getConfigs = () => request.get('/configs')
 export const adminGetConfigs = () => request.get('/admin/configs')
 export const adminSaveConfig = (data) => request.put('/admin/configs', data)
+
+// 操作日志为只读：后端没有提供修改与删除接口
+export const adminGetLogs = (params) => request.get('/admin/logs', { params })

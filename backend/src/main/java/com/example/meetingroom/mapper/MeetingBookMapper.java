@@ -42,4 +42,17 @@ public interface MeetingBookMapper {
                      @Param("status") Integer status,
                      @Param("auditMsg") String auditMsg,
                      @Param("auditTime") LocalDateTime auditTime);
+
+    /**
+     * 定时任务专用：把使用时间已结束的预定批量置为已完成。
+     * <p>
+     * 只更新 status 一列，不动 audit_msg / audit_time（这与 updateStatus 的区别，
+     * 详见 MeetingBookMapper.xml 中的说明）。时间比较交给数据库的 NOW() 完成。
+     *
+     * @param fromStatus 源状态，业务上固定传「已通过」
+     * @param toStatus   目标状态，业务上固定传「已完成」
+     * @return 本次实际更新的行数，为 0 表示没有待处理的记录
+     */
+    int completeExpired(@Param("fromStatus") Integer fromStatus,
+                        @Param("toStatus") Integer toStatus);
 }

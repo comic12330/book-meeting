@@ -116,7 +116,7 @@ public class BookService {
      * @param bookId 待审核的预定记录主键
      * @param dto    审核结果，status 只能是 1 或 2，驳回时 auditMsg 必填
      * @throws BusinessException 审核结果非法、记录不存在、记录已被处理、驳回未填理由、
-     *                           或时段已被其他通过的预定占用时抛出
+     *                           使用时间已结束仍尝试通过、或时段已被其他通过的预定占用时抛出
      */
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long bookId, AuditDTO dto) {
@@ -136,6 +136,13 @@ public class BookService {
             throw new BusinessException(400, "驳回时必须填写理由");
         }
         if (!reject) {
+            // 已结束的申请不能再通过：否则通过后下一次定时任务立刻把它置为已完成，
+            // 状态相当于从「待审核」直接跳到「已完成」，历史记录里看不出中间通过过。
+            // 这里只拦「通过」不拦「驳回」——驳回是清理过期待审队列的唯一出口，
+            // 若把驳回也拦住，这些记录就只能进数据库手改。
+            if (!book.getEndTime().isAfter(LocalDateTime.now())) {
+                throw new BusinessException(1001, "该申请的使用时间已结束，不能再审核为通过");
+            }
             // 先锁住会议室行，把同一会议室的审核串行化；
             // 两个管理员同时点「通过」时，后一个会等前一个提交完再校验，避免双双通过造成重复占用。
             roomMapper.lockById(book.getRoomId());
@@ -175,6 +182,30 @@ public class BookService {
             throw new BusinessException(1001, "会议已开始或已结束，不能取消");
         }
         bookMapper.updateStatus(bookId, BookStatus.CANCELLED, null, null);
+    }
+
+    /**
+     * 把使用时间已结束的「已通过」预定批量置为「已完成」（状态 1 → 4）。
+     * <p>
+     * 由定时任务 {@code com.example.meetingroom.task.BookStatusTask} 周期调用，
+     * 管理端另有一个手动触发接口，两者共用本方法，避免把同一段 SQL 写两遍。
+     * <p>
+     * 三个设计取舍：
+     * <ul>
+     *   <li><b>幂等由 SQL 条件保证</b>：判定是 {@code status = 1 AND end_time < NOW()}，
+     *       已经是 4 的记录不再命中，重复调用影响 0 行；多实例并发也是后到的影响 0 行，
+     *       不需要分布式锁；</li>
+     *   <li><b>不需要补跑机制</b>：条件基于数据本身而不是「上次执行到哪」，
+     *       服务停机期间漏掉的记录，下次启动后第一次执行会自动补齐；</li>
+     *   <li><b>不动审核痕迹</b>：只改 status 一列，audit_msg / audit_time 原样保留，
+     *       所以没有复用 {@link MeetingBookMapper#updateStatus}。</li>
+     * </ul>
+     *
+     * @return 本次被置为已完成的记录条数，0 表示没有待处理的记录
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int completeExpired() {
+        return bookMapper.completeExpired(BookStatus.APPROVED, BookStatus.COMPLETED);
     }
 
     /**

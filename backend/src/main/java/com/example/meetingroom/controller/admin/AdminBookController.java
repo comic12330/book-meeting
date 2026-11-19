@@ -8,6 +8,7 @@ import com.example.meetingroom.service.BookService;
 import com.example.meetingroom.vo.BookVO;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,5 +49,17 @@ public class AdminBookController {
     public Result<Void> audit(@PathVariable Long id, @RequestBody @Valid AuditDTO dto) {
         bookService.audit(id, dto);
         return Result.success("审核已提交", null);
+    }
+
+    /**
+     * 手动触发一次「已结束预定转已完成」的扫描。
+     * <p>
+     * 定时任务每 5 分钟自动跑一次，本接口不是业务功能，存在的唯一原因是方便验证与演示：
+     * 不必干等调度窗口，也不用临时改 cron 表达式重打包。返回本次更新的记录条数，
+     * 连点两次第二次必然返回 0，可用来验证幂等。
+     */
+    @PostMapping("/complete-expired")
+    public Result<Integer> completeExpired() {
+        return Result.success("扫描完成", bookService.completeExpired());
     }
 }

@@ -26,6 +26,14 @@ spring:
         url-pattern: /druid/*
         login-username: admin
         login-password: admin
+  # 定时任务线程池：默认只有一个线程，多个任务会排队互相阻塞。
+  # 目前只有「已结束预定转已完成」一项，留 2 个线程是为后续新增统计类任务预留，
+  # 同时改掉线程名前缀，日志里一眼能看出是定时任务在跑。
+  task:
+    scheduling:
+      pool:
+        size: 2
+      thread-name-prefix: meeting-task-
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
@@ -48,6 +56,10 @@ meeting:
   page:
     default-size: 10
     max-size: 100
+  # 定时任务调度参数（技术参数，不进 sys_config）
+  task:
+    # 已结束预定转已完成的扫描间隔：每 5 分钟一次（秒 分 时 日 月 周）
+    complete-expired-cron: "0 */5 * * * *"
 
 logging:
   level:

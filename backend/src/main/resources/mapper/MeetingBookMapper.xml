@@ -132,4 +132,25 @@
             audit_time = #{auditTime}
         WHERE id = #{id}
     </update>
+
+    <!--
+        定时任务专用：把已通过的预定批量置为已完成。
+        刻意不复用 updateStatus —— 那条语句会重写 audit_msg 与 audit_time，
+        定时任务手里没有审核意见，传 null 会把「谁、何时、以什么理由审批」清空，
+        历史可追溯性就断了。这里只改 status 一列。
+
+        时间基准用数据库的 NOW() 而不是 Java 传入当前时间：create_time 由
+        DEFAULT CURRENT_TIMESTAMP 生成，两者用同一个时钟源，才不会出现
+        「JVM 与 MySQL 时区/时间不一致导致刚提交就被判结束」这类错乱。
+
+        条件自带幂等：更新过的记录 status 已变为 4，不再满足 status = #{fromStatus}，
+        重复执行影响 0 行。多实例同时跑也只是后到的那个更新 0 行，无需分布式锁。
+        跨天会议（如 19:00 → 次日 02:00）无需特殊处理，end_time 是完整 DATETIME。
+    -->
+    <update id="completeExpired">
+        UPDATE meeting_book
+        SET status = #{toStatus}
+        WHERE status = #{fromStatus}
+          AND end_time &lt; NOW()
+    </update>
 </mapper>

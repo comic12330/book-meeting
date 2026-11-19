@@ -18,6 +18,7 @@
 │       │   ├── controller/        # 用户端接口
 │       │   ├── controller/admin/  # 管理端接口
 │       │   ├── service/           # 业务层（冲突校验在 BookService，参数读取在 SysConfigService）
+│       │   ├── task/              # 定时任务（已结束预定自动置为「已完成」）
 │       │   ├── mapper/            # MyBatis Mapper 接口
 │       │   ├── entity/dto/vo/     # 实体、入参、出参
 │       │   └── util/              # 令牌、密码摘要
@@ -127,7 +128,8 @@ npm run dev
 | PUT | `/api/admin/rooms/{id}` | 编辑会议室 |
 | DELETE | `/api/admin/rooms/{id}` | 删除会议室（有预定记录时拒绝） |
 | GET | `/api/admin/books` | 预定分页，支持状态/会议室/关键字筛选 |
-| PUT | `/api/admin/books/{id}/audit` | 审核（status=1 通过，2 驳回，驳回必填理由） |
+| PUT | `/api/admin/books/{id}/audit` | 审核（status=1 通过，2 驳回，驳回必填理由；使用时间已结束的申请不能通过） |
+| POST | `/api/admin/books/complete-expired` | 手动触发一次「已结束→已完成」扫描，返回更新条数（验证与演示用） |
 | GET | `/api/admin/users` | 用户分页，支持账号/姓名模糊、角色/状态筛选 |
 | POST | `/api/admin/users` | 新增用户（账号、初始密码必填） |
 | PUT | `/api/admin/users/{id}` | 编辑用户（只能改姓名、电话、角色、状态，账号不可变） |
@@ -218,7 +220,32 @@ WHERE room_id = #{roomId}
 6. **跨天支持**：起止时间都是 `datetime`，用 `LocalDateTime` 比较，20:00–次日 02:00 可正常判定。
 7. **后端独立校验**：`checkTimeRange()` 校验结束晚于开始、不早于当前时刻、单次跨度不超上限、开始时刻落在每日可预定窗口内，且不超出最多提前天数；阈值全部读 `sys_config`，不依赖前端时间控件。
 
-## 八、已完成的联调验证
+## 八、定时任务：已结束预定自动完成
+
+使用时间已结束、状态仍为「已通过」的记录，由定时任务周期置为「已完成」（1 → 4）：
+
+```sql
+UPDATE meeting_book SET status = 4
+WHERE status = 1 AND end_time < NOW()
+```
+
+| 项 | 取值 |
+|---|---|
+| 调度方式 | `@EnableScheduling` + `@Scheduled`，间隔在 `application.yml` 的 `meeting.task.complete-expired-cron`，默认每 5 分钟 |
+| 代码位置 | `task/BookStatusTask`（何时跑） + `BookService.completeExpired`（做什么） |
+| 手动触发 | `POST /api/admin/books/complete-expired`，与定时任务共用同一个 service 方法，便于验证与演示 |
+| 时间基准 | 数据库 `NOW()` |
+
+四个刻意做成这样的点：
+
+1. **不复用 `updateStatus`**：那条语句会重写 `audit_msg` 与 `audit_time`。定时任务手里没有审核意见，传 null 会把「谁、何时、以什么理由审批」清空，历史可追溯性就断了。这里单独写一条只改 `status` 的 UPDATE。
+2. **时间基准交给数据库**：`create_time` 由 `DEFAULT CURRENT_TIMESTAMP` 生成，用 `NOW()` 比较保证两侧同一时钟源；改在 Java 里取当前时间，JVM 与 MySQL 时区不一致时会出现「刚提交就被判为已结束」。
+3. **幂等，不需要分布式锁**：更新过的记录状态已是 4，不再命中 `status = 1`，重复执行影响 0 行；多实例并发也只是后到的影响 0 行。
+4. **不需要补跑机制**：判定条件基于数据本身，而不是「上次执行到哪」，停机期间漏掉的记录由下次启动后的第一次执行自动补齐。跨天会议（19:00 → 次日 02:00）无需特殊处理。
+
+配套改动：`audit()` 增加一条校验——使用时间已结束的申请不能再「通过」。否则通过后下一轮任务立刻把它变成已完成，状态等于从「待审核」直接跳到「已完成」，中间那一步在历史里看不见。**只拦「通过」不拦「驳回」**：驳回是清理过期待审队列的唯一出口，若一并拦住，这些记录就只能进数据库手改。
+
+## 九、已完成的联调验证
 
 在 MySQL 8.0 + JDK 11 环境实跑，接口层逐条验证（非纸面推演）：
 
@@ -256,18 +283,22 @@ WHERE room_id = #{roomId}
 | 参数：把容量上限改为 100 后新增/编辑 150 人会议室 | 均拦截 |
 | 参数：非整数 / 超范围 / 非法时间 / 起始晚于最晚开始 / 未知键 | 均返回 400 并说明原因 |
 | 参数：pageSize 传 1000 | 按配置上限截断 |
+| 定时任务：已结束的「已通过」记录 | 自动置为「已完成」，`audit_time` 原值保留未被清空 |
+| 定时任务：`end_time` 未到的「已通过」记录 | 状态保持不变，扫描返回 0 条 |
+| 定时任务：连续触发两次扫描 | 第一次 1 条、第二次 0 条（幂等） |
+| 审核：对使用时间已结束的待审记录点「通过」 | 拦截，提示「该申请的使用时间已结束」 |
+| 审核：对同一条记录点「驳回」 | 正常执行（清理过期待审队列的通道仍保留） |
 
-## 九、可直接作为拓展项继续做的功能
+## 十、可直接作为拓展项继续做的功能
 
-任务书列出的 9 项拓展里，以下 5 项与本项目结构契合度最高，加分各 3–5 分：
+任务书列出的 9 项拓展里，以下 4 项与本项目结构契合度最高，加分各 3–5 分（第 4 项「定时任务」已实现，见第八节，故不再列出）：
 
 1. 日历视图展示会议室占用（按 room + 日期查 meeting_book）
 2. ECharts 统计各会议室月使用频次与使用率
 3. 操作日志（新增 `oper_log` 表 + AOP 切面记录）
-4. 定时任务把已结束的预定置为「已完成」（`@Scheduled` + `status=1 AND end_time < now()`）
-5. 频繁取消的提交限制（按 user 统计 30 天内取消次数）
+4. 频繁取消的提交限制（按 user 统计 30 天内取消次数）
 
-## 十、注意事项
+## 十一、注意事项
 
 - **改了后端代码要重启**：`BookService` / Mapper 的修改不会热生效（工程未装 devtools），IDEA 里停止后重新运行 `MeetingRoomApplication`。
 - 密码摘要用 MD5：任务书允许「BCrypt 或 MD5」，选 MD5 是为了建库脚本能离线一次执行。若要升级 BCrypt，只改 `Md5Util` 的 `encode`/`verify` 实现，调用方无需改动（数据库 `password` 字段已是 VARCHAR(64)，足够存 BCrypt 的 60 位）。

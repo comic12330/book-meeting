@@ -144,7 +144,7 @@ public class SysConfigService {
         String trimmed = value.trim();
         if (def.getType() == SysConfigKey.ValueType.TIME) {
             if (!TIME_PATTERN.matcher(trimmed).matches()) {
-                throw new BusinessException(400, def.getName() + " 需为 HH:mm 格式，例如 08:00");
+                throw new BusinessException(400, def.getName() + "需为 HH:mm 格式，例如 08:00");
             }
             return trimmed;
         }
@@ -152,10 +152,10 @@ public class SysConfigService {
         try {
             number = Integer.parseInt(trimmed);
         } catch (NumberFormatException e) {
-            throw new BusinessException(400, def.getName() + " 需为整数");
+            throw new BusinessException(400, def.getName() + "需为整数");
         }
         if (number < def.getMin() || number > def.getMax()) {
-            throw new BusinessException(400, def.getName() + " 需在 " + def.getMin()
+            throw new BusinessException(400, def.getName() + "需在 " + def.getMin()
                     + " 至 " + def.getMax() + " 之间");
         }
         return String.valueOf(number);

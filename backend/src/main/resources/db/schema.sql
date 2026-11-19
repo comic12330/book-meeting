@@ -125,7 +125,6 @@ CREATE TABLE `operation_log` (
     `op_result`     TINYINT         NOT NULL DEFAULT 1      COMMENT '结果：1 成功，0 失败',
     `result_msg`    VARCHAR(255)    DEFAULT NULL            COMMENT '失败原因',
     `target_desc`   VARCHAR(200)    DEFAULT NULL            COMMENT '操作对象的可读描述，如「第一会议室 2026-11-20 09:00-10:00」',
-    `op_ip`         VARCHAR(45)     DEFAULT NULL            COMMENT '来源 IP',
     `op_time`       DATETIME        NOT NULL                COMMENT '操作时间',
     PRIMARY KEY (`id`),
     KEY `idx_log_time` (`op_time`),

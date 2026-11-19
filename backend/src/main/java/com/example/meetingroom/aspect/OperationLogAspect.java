@@ -20,11 +20,8 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.annotation.Resource;
-import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 
@@ -34,7 +31,7 @@ import java.time.LocalDateTime;
  * 四个设计点，都是踩过才知道的：
  * <ol>
  *   <li><b>操作人在主线程快照</b>：{@link UserContext} 是 ThreadLocal，一旦把记录动作丢给
- *       异步线程就读不到了。这里在进入方法时就取出用户与 IP 存进局部变量，
+ *       异步线程就读不到了。这里在进入方法时就取出用户存进局部变量，
  *       无论后面是同步写还是事务回调里写都不会丢。</li>
  *   <li><b>成功日志在事务提交后写</b>：若与业务同事务，业务回滚时日志会一起消失；
  *       若强行独立事务先提交，又会出现「日志说有、业务表没有」。注册 afterCommit 回调，
@@ -75,23 +72,22 @@ public class OperationLogAspect {
         }
 
         String target = resolveTarget(annotation.target(), pjp);
-        String ip = resolveIp();
 
         Object result;
         try {
             result = pjp.proceed();
         } catch (Throwable e) {
-            writeQuietly(buildLog(user, annotation, target, ip, 0, failureReason(e)));
+            writeQuietly(buildLog(user, annotation, target, 0, failureReason(e)));
             throw e;
         }
-        writeAfterCommit(buildLog(user, annotation, target, ip, 1, null));
+        writeAfterCommit(buildLog(user, annotation, target, 1, null));
         return result;
     }
 
     // ------------------------------------------------------------ 私有方法
 
     private OperationLog buildLog(LoginUser user, LogOperation annotation, String target,
-                                  String ip, int result, String resultMsg) {
+                                  int result, String resultMsg) {
         OperationLog entity = new OperationLog();
         entity.setOperatorId(user.getUserId());
         // 存姓名快照，姓名缺失（理论上不会）时退回账号，避免日志里出现空白操作人
@@ -101,7 +97,6 @@ public class OperationLogAspect {
         entity.setOpResult(result);
         entity.setResultMsg(resultMsg);
         entity.setTargetDesc(target);
-        entity.setOpIp(ip);
         entity.setOpTime(LocalDateTime.now());
         return entity;
     }
@@ -175,21 +170,5 @@ public class OperationLogAspect {
             message = e.getClass().getSimpleName() + ": " + message;
         }
         return message.length() > MAX_MSG_LENGTH ? message.substring(0, MAX_MSG_LENGTH) : message;
-    }
-
-    private String resolveIp() {
-        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes)) {
-            return null;
-        }
-        HttpServletRequest request =
-                ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
-        // 反向代理场景下 remoteAddr 是代理地址，优先取转发的第一个来源
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.trim().isEmpty()) {
-            int comma = forwarded.indexOf(',');
-            String first = comma > 0 ? forwarded.substring(0, comma) : forwarded;
-            return first.trim();
-        }
-        return request.getRemoteAddr();
     }
 }

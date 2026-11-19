@@ -36,9 +36,6 @@ public class OperationLog {
     /** 操作对象的可读描述 */
     private String targetDesc;
 
-    /** 来源 IP */
-    private String opIp;
-
     /** 操作时间 */
     private LocalDateTime opTime;
 
@@ -104,14 +101,6 @@ public class OperationLog {
 
     public void setTargetDesc(String targetDesc) {
         this.targetDesc = targetDesc;
-    }
-
-    public String getOpIp() {
-        return opIp;
-    }
-
-    public void setOpIp(String opIp) {
-        this.opIp = opIp;
     }
 
     public LocalDateTime getOpTime() {

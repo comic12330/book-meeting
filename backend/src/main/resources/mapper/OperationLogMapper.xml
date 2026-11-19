@@ -11,9 +11,9 @@
     <insert id="insert" parameterType="com.example.meetingroom.entity.OperationLog"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO operation_log (operator_id, operator_name, module, op_type,
-                                   op_result, result_msg, target_desc, op_ip, op_time)
+                                   op_result, result_msg, target_desc, op_time)
         VALUES (#{operatorId}, #{operatorName}, #{module}, #{opType},
-                #{opResult}, #{resultMsg}, #{targetDesc}, #{opIp}, #{opTime})
+                #{opResult}, #{resultMsg}, #{targetDesc}, #{opTime})
     </insert>
 
     <!--
@@ -22,7 +22,7 @@
     -->
     <select id="selectByCondition" resultType="com.example.meetingroom.entity.OperationLog">
         SELECT id, operator_id, operator_name, module, op_type,
-               op_result, result_msg, target_desc, op_ip, op_time
+               op_result, result_msg, target_desc, op_time
         FROM operation_log
         <where>
             <if test="query.module != null and query.module != ''">

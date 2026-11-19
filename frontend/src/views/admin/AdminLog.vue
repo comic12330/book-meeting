@@ -39,7 +39,6 @@
           </template>
         </el-table-column>
         <el-table-column prop="opTime" label="操作时间" width="165" />
-        <el-table-column prop="opIp" label="来源 IP" width="125" />
       </el-table>
 
       <div class="pager">

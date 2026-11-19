@@ -1,6 +1,8 @@
 package com.example.meetingroom.service;
 
+import com.example.meetingroom.annotation.LogOperation;
 import com.example.meetingroom.common.BusinessException;
+import com.example.meetingroom.common.OperationType;
 import com.example.meetingroom.common.SysConfigKey;
 import com.example.meetingroom.entity.SysConfig;
 import com.example.meetingroom.mapper.SysConfigMapper;
@@ -95,8 +97,13 @@ public class SysConfigService {
 
     /**
      * 修改单个参数。只允许改值，不允许增删参数项。
+     * <p>
+     * 日志描述记「参数名 改为 新值」而不是键名：键名是实现细节，事后追查的人看的是
+     * 「单次预定最长时长被改成了 24」，不是 booking.max-hours。
      */
     @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.CONFIG_UPDATE,
+            target = "describe(#configKey) + ' 改为 ' + #configValue")
     public void update(String configKey, String configValue) {
         SysConfigKey def = SysConfigKey.of(configKey);
         if (def == null) {
@@ -108,6 +115,17 @@ public class SysConfigService {
             throw new BusinessException(1001, "参数项不存在，请检查数据库初始化是否完整");
         }
         cache.put(configKey, normalized);
+    }
+
+    /**
+     * 供操作日志取参数名称，如「单次预定最长时长」。
+     * <p>
+     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#configKey) + ...")}）。
+     * 键名是代码与数据之间的契约，属于实现细节，日志里只留使用者能看懂的名称。
+     */
+    public String describe(String configKey) {
+        SysConfigKey def = SysConfigKey.of(configKey);
+        return def == null ? null : def.getName();
     }
 
     // ------------------------------------------------------------ 私有方法

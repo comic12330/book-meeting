@@ -33,6 +33,16 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!--
+            操作日志切面所需。
+            spring-boot-starter-web 只经传递依赖带入 spring-aop，不含编译器所需 aspectjweaver，
+            缺了它 @Aspect 在编译期就会报找不到 org.aspectj.lang.annotation.Aspect。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- 持久层：原生 MyBatis -->
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>

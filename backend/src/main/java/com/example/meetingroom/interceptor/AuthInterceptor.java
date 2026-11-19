@@ -53,7 +53,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (!UserRole.isEnabled(current.getStatus())) {
             throw new BusinessException(401, "账号已被停用，请联系管理员");
         }
-        UserContext.set(new LoginUser(current.getId(), current.getUsername(), current.getRole()));
+        UserContext.set(new LoginUser(current.getId(), current.getUsername(),
+                current.getRole(), current.getRealName()));
 
         if (request.getRequestURI().startsWith("/api/admin/") && !UserRole.isAdmin(current.getRole())) {
             throw new BusinessException(403, "该操作仅管理员可执行");

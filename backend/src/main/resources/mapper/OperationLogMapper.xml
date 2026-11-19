@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.meetingroom.mapper.OperationLogMapper">
+
+    <!--
+        操作日志表。只写不改：本文件刻意没有 update / delete 语句，
+        审计日志可以被修整就等于没有审计。
+    -->
+
+    <insert id="insert" parameterType="com.example.meetingroom.entity.OperationLog"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO operation_log (operator_id, operator_name, module, op_type,
+                                   op_result, result_msg, target_desc, op_ip, op_time)
+        VALUES (#{operatorId}, #{operatorName}, #{module}, #{opType},
+                #{opResult}, #{resultMsg}, #{targetDesc}, #{opIp}, #{opTime})
+    </insert>
+
+    <!--
+        五个筛选条件都可选。排序用 op_time 倒序，同一毫秒的按主键倒序，
+        保证翻页时顺序稳定（只按时间排，同一秒内的多条记录顺序可能漂移）。
+    -->
+    <select id="selectByCondition" resultType="com.example.meetingroom.entity.OperationLog">
+        SELECT id, operator_id, operator_name, module, op_type,
+               op_result, result_msg, target_desc, op_ip, op_time
+        FROM operation_log
+        <where>
+            <if test="query.module != null and query.module != ''">
+                AND module = #{query.module}
+            </if>
+            <if test="query.opType != null and query.opType != ''">
+                AND op_type = #{query.opType}
+            </if>
+            <if test="query.operator != null and query.operator != ''">
+                AND operator_name LIKE CONCAT('%', #{query.operator}, '%')
+            </if>
+            <if test="query.startTime != null">
+                AND op_time &gt;= #{query.startTime}
+            </if>
+            <if test="query.endTime != null">
+                AND op_time &lt;= #{query.endTime}
+            </if>
+        </where>
+        ORDER BY op_time DESC, id DESC
+    </select>
+</mapper>

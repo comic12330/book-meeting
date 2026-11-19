@@ -13,6 +13,7 @@ USE `meeting_room`;
 DROP TABLE IF EXISTS `meeting_book`;
 DROP TABLE IF EXISTS `notice`;
 DROP TABLE IF EXISTS `meeting_room`;
+DROP TABLE IF EXISTS `operation_log`;
 DROP TABLE IF EXISTS `user`;
 
 -- ------------------------------------------------------------
@@ -103,6 +104,32 @@ CREATE TABLE `sys_config` (
     `update_time`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
     PRIMARY KEY (`config_key`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统业务参数表';
+
+-- ------------------------------------------------------------
+-- 操作日志表
+-- 只记录管理端的数据变更动作（增删改），用于事后追查「谁在什么时候改了什么」。
+-- 此处刻意的两处取舍：
+--   1. 操作人姓名存快照，不连 user 表。日志要回答的是「当时是谁」，用户改名或
+--      调岗后历史不能被追溯修改，连表查会把历史一起改掉。
+--   2. 不加指向 user 的外键。日志属审计数据，不能因为用户状态变化插不进去；
+--      meeting_book 加外键是在防脏数据，两者目的不同，不能照搬。
+-- ------------------------------------------------------------
+CREATE TABLE `operation_log` (
+    `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `operator_id`   BIGINT UNSIGNED NOT NULL                COMMENT '操作人',
+    `operator_name` VARCHAR(50)     NOT NULL                COMMENT '操作人姓名（操作当时的快照）',
+    `module`        VARCHAR(16)     NOT NULL                COMMENT '所属模块：ROOM/BOOK/USER/NOTICE/CONFIG',
+    `op_type`       VARCHAR(40)     NOT NULL                COMMENT '操作类型，与 OperationType 枚举一一对应',
+    `op_result`     TINYINT         NOT NULL DEFAULT 1      COMMENT '结果：1 成功，0 失败',
+    `result_msg`    VARCHAR(255)    DEFAULT NULL            COMMENT '失败原因',
+    `target_desc`   VARCHAR(200)    DEFAULT NULL            COMMENT '操作对象的可读描述，如「第一会议室 2026-11-20 09:00-10:00」',
+    `op_ip`         VARCHAR(45)     DEFAULT NULL            COMMENT '来源 IP',
+    `op_time`       DATETIME        NOT NULL                COMMENT '操作时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_log_time` (`op_time`),
+    KEY `idx_log_operator` (`operator_id`, `op_time`),
+    KEY `idx_log_type` (`module`, `op_type`, `op_time`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '操作日志表';
 
 -- ============================================================
 -- 初始化数据（所有账号初始密码均为 123456，存储 MD5 摘要）

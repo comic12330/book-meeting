@@ -16,12 +16,12 @@ public enum SysConfigKey {
     /** 单次预定最长时长，单位小时 */
     BOOKING_MAX_HOURS("booking.max-hours", "单次预定最长时长", "小时", "8",
             ValueType.INT, 1, 12, 10,
-            "一场会议最多能占用会议室多久，超出需拆成多次申请"),
+            "一场会议最多能占用会议室多久"),
 
     /** 最多可以提前多少天预定 */
     BOOKING_MAX_ADVANCE_DAYS("booking.max-advance-days", "最多提前预定天数", "天", "30",
-            ValueType.INT, 0, 90, 20,
-            "员工最多能提前多久预约，设为 30 表示只能选 30 天以内的日期；设为 0 表示只接受当天预约"),
+            ValueType.INT, 0, 30, 20,
+            "使用者最多能提前多久预约，设为 30 表示只能选 30 天以内的日期；设为 0 表示只接受当天预约"),
 
     /** 每日最早可预定时刻 */
     BOOKING_DAILY_START("booking.daily-start", "每日可预定起始时间", "", "08:00",
@@ -35,7 +35,7 @@ public enum SysConfigKey {
 
     /** 会议室容纳人数上限，防止录入离谱数值 */
     ROOM_MAX_CAPACITY("room.max-capacity", "会议室容纳人数上限", "人", "200",
-            ValueType.INT, 1, 1000, 50,
+            ValueType.INT, 1, 200, 50,
             "登记会议室时允许填写的最大人数，用于拦住明显录错的数字");
 
     /** 参数值的类型，决定校验方式与前端输入控件 */

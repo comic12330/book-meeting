@@ -31,14 +31,20 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="auditMsg" label="审核意见" min-width="130" show-overflow-tooltip />
-        <el-table-column label="操作" width="130" align="center">
+        <el-table-column label="处理说明" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.status === 3 ? (row.cancelReason || '本人取消') : (row.auditMsg || '—') }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
             <template v-if="row.status === 0">
               <el-button type="success" link @click="onAudit(row, 1)">通过</el-button>
               <el-button type="danger" link @click="openReject(row)">驳回</el-button>
             </template>
-            <span v-else class="muted">已处理</span>
+            <el-button v-if="row.status === 0 || row.status === 1" type="warning" link
+                       @click="openCancel(row)">取消</el-button>
+            <span v-if="row.status > 1" class="muted">已处理</span>
           </template>
         </el-table-column>
       </el-table>
@@ -60,6 +66,21 @@
         <el-button type="danger" :loading="auditing" @click="onConfirmReject">确认驳回</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="cancelVisible" title="取消预定" width="460px">
+      <el-alert type="warning" :closable="false" show-icon
+                title="这是单方面取消他人的预定，理由会显示给申请人" style="margin-bottom: 12px" />
+      <el-form label-width="70px">
+        <el-form-item label="理由">
+          <el-input v-model="cancelReason" type="textarea" :rows="3"
+                    placeholder="说明为什么要取消这场会议，例如会议室另有用途" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelVisible = false">再想想</el-button>
+        <el-button type="warning" :loading="cancelling" @click="onConfirmCancel">确认取消</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -73,7 +94,7 @@
  */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminGetBooks, adminAudit } from '../../api'
+import { adminGetBooks, adminAudit, adminCancelBook } from '../../api'
 import { BOOK_STATUS } from '../../utils/dict'
 
 const loading = ref(false)
@@ -85,6 +106,9 @@ const query = reactive({ pageNum: 1, pageSize: 10, status: 0, keyword: '' })
 
 const rejectVisible = ref(false)
 const rejectMsg = ref('')
+const cancelVisible = ref(false)
+const cancelReason = ref('')
+const cancelling = ref(false)
 const currentRow = ref(null)
 
 // 序号跨页连续：第 2 页从 11 开始，而不是回到 1
@@ -145,8 +169,29 @@ async function onConfirmReject() {
   }
 }
 
-onMounted(() => load())
-</script>
+function openCancel(row) {
+  currentRow.value = row
+  cancelReason.value = ''
+  cancelVisible.value = true
+}
+
+async function onConfirmCancel() {
+  if (!cancelReason.value.trim()) {
+    ElMessage.warning('取消他人预定必须填写理由')
+    return
+  }
+  cancelling.value = true
+  try {
+    await adminCancelBook(currentRow.value.id, { reason: cancelReason.value.trim() })
+    ElMessage.success('已取消该预定')
+    cancelVisible.value = false
+    load()
+  } finally {
+    cancelling.value = false
+  }
+}
+
+onMounted(() => load())</script>
 
 <style scoped>
 .muted {

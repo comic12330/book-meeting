@@ -43,7 +43,7 @@
     <!-- 审核与取消前的取数：拿到的是数据库当前状态，用来判断这条记录是否还能操作 -->
     <select id="findById" resultType="com.example.meetingroom.entity.MeetingBook">
         SELECT id, user_id, room_id, start_time, end_time, purpose, participant_num,
-               status, audit_msg, audit_time, create_time
+               status, audit_msg, audit_time, cancel_reason, cancel_time, create_time
         FROM meeting_book
         WHERE id = #{id}
     </select>
@@ -59,6 +59,8 @@
         b.status        AS status,
         b.audit_msg     AS auditMsg,
         b.audit_time    AS auditTime,
+        b.cancel_reason AS cancelReason,
+        b.cancel_time   AS cancelTime,
         b.create_time   AS createTime,
         r.room_name     AS roomName,
         r.location      AS location,
@@ -121,15 +123,31 @@
     </select>
 
     <!--
-        状态流转统一走这一条 UPDATE：审核（1/2）与取消（3）都调用它。
-        审核意见与审核时间一并落库，保证「谁、在什么时候、以什么理由处理」可以追溯。
-        取消时这两项传 null，因为取消不是审核动作。
+        审核专用：把状态流转为 1（通过）或 2（驳回），并落审核意见与审核时间。
+        取消不走这条语句，见下面的 cancelById。
     -->
     <update id="updateStatus">
         UPDATE meeting_book
         SET status     = #{status},
             audit_msg  = #{auditMsg},
             audit_time = #{auditTime}
+        WHERE id = #{id}
+    </update>
+
+    <!--
+        取消专用：只改状态与取消理由、取消时间，刻意不动 audit_msg 与 audit_time。
+
+        原先取消复用 updateStatus 并把审核意见传 null，结果是「审核通过 → 取消」的记录
+        在取消后丢失审核时间（通过了意见也会被一起清空），「何时由谁审批过」永久查不到。
+        completeExpired 早就因为同样的理由没有复用 updateStatus，这里统一口径。
+
+        取消理由只由管理员取消他人预定时写入；本人取消传 null，由页面显示为「本人取消」。
+    -->
+    <update id="cancelById">
+        UPDATE meeting_book
+        SET status        = #{status},
+            cancel_reason = #{cancelReason},
+            cancel_time   = #{cancelTime}
         WHERE id = #{id}
     </update>
 

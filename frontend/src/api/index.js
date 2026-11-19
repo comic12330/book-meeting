@@ -27,6 +27,7 @@ export const adminDeleteRoom = (id) => request.delete(`/admin/rooms/${id}`)
 
 export const adminGetBooks = (params) => request.get('/admin/books', { params })
 export const adminAudit = (id, data) => request.put(`/admin/books/${id}/audit`, data)
+export const adminCancelBook = (id, data) => request.put(`/admin/books/${id}/cancel`, data)
 
 export const adminGetNotices = () => request.get('/admin/notices')
 export const adminSaveNotice = (data) => request.post('/admin/notices', data)

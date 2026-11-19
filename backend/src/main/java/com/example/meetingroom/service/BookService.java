@@ -1,7 +1,9 @@
 package com.example.meetingroom.service;
 
+import com.example.meetingroom.annotation.LogOperation;
 import com.example.meetingroom.common.BookStatus;
 import com.example.meetingroom.common.BusinessException;
+import com.example.meetingroom.common.OperationType;
 import com.example.meetingroom.common.PageResult;
 import com.example.meetingroom.common.RoomStatus;
 import com.example.meetingroom.common.SysConfigKey;
@@ -9,6 +11,7 @@ import com.example.meetingroom.common.UserContext;
 import com.example.meetingroom.dto.AuditDTO;
 import com.example.meetingroom.dto.BookQueryDTO;
 import com.example.meetingroom.dto.BookSubmitDTO;
+import com.example.meetingroom.dto.CancelDTO;
 import com.example.meetingroom.entity.MeetingBook;
 import com.example.meetingroom.entity.MeetingRoom;
 import com.example.meetingroom.mapper.MeetingBookMapper;
@@ -34,7 +37,7 @@ import java.util.List;
  * <ul>
  *   <li><b>提交环节</b> {@link #submit}：把「待审核」也算作占用，重叠的申请当场拒绝，
  *       保证进入待审队列的申请互不冲突；</li>
- *   <li><b>审核环节</b> {@link #audit}：只把「已通过」算作占用，并对会议室行加锁串行化，
+ *   <li><b>审核环节</b> {@link #approve}：只把「已通过」算作占用，并对会议室行加锁串行化，
  *       保证两条时段重叠的待审申请中只有一条能通过。</li>
  * </ul>
  * 两个环节用的是同一个判定方法 {@link #checkConflict}，差异只在参与判定的状态集合，
@@ -104,53 +107,64 @@ public class BookService {
     }
 
     /**
-     * 审核预定，把状态从 0（待审核）改为 1（通过）或 2（驳回）。
+     * 审核通过：把状态从 0（待审核）改为 1（通过），并执行第二次冲突校验。
      * <p>
-     * 通过时执行第二次冲突校验，这是全套约束的最后一道闸门：
-     * 提交环节虽然已经拦过重叠申请，但两个用户可以并发提交，各自读到「无冲突」后都插入成功，
-     * 于是待审队列里可能出现两条时段重叠的申请。此时靠审核环节保证只有一条能通过——
-     * 先到的那条把会议室占住，后到的这条在这里被拒绝。
+     * 这是全套约束的最后一道闸门。提交环节虽然已经拦过重叠申请，但两个用户可以并发提交，
+     * 各自读到「无冲突」后都插入成功，于是待审队列里可能出现两条时段重叠的申请。
+     * 此时靠这一环节保证只有一条能通过——先到的那条把会议室占住，后到的在这里被拒绝。
      * <p>
-     * 驳回不涉及占用，因此不校验冲突，但必须填写理由，便于申请人知道该改什么。
+     * 「通过」与「驳回」之所以拆成两个方法，是因为操作日志要按动作区分类型：
+     * 一个方法只能挂一个注解，而管理员最常筛的就是「谁批的、谁驳的」。
      *
      * @param bookId 待审核的预定记录主键
-     * @param dto    审核结果，status 只能是 1 或 2，驳回时 auditMsg 必填
-     * @throws BusinessException 审核结果非法、记录不存在、记录已被处理、驳回未填理由、
-     *                           使用时间已结束仍尝试通过、或时段已被其他通过的预定占用时抛出
+     * @param dto    审核结果，status 必须为 1
+     * @throws BusinessException 结果非法、记录不存在、记录已被处理、
+     *                           使用时间已结束、或时段已被其他通过的预定占用时抛出
      */
     @Transactional(rollbackFor = Exception.class)
-    public void audit(Long bookId, AuditDTO dto) {
-        Integer target = dto.getStatus();
-        if (!BookStatus.isAuditResult(target)) {
+    @LogOperation(type = OperationType.BOOK_AUDIT_APPROVE, target = "describe(#bookId)")
+    public void approve(Long bookId, AuditDTO dto) {
+        if (!Integer.valueOf(BookStatus.APPROVED).equals(dto.getStatus())) {
             throw new BusinessException(400, "审核结果只能是通过或驳回");
         }
-        MeetingBook book = bookMapper.findById(bookId);
-        if (book == null) {
-            throw new BusinessException(1001, "预定记录不存在");
+        MeetingBook book = requirePending(bookId);
+        // 已结束的申请不能再通过：否则通过后下一次定时任务立刻把它置为已完成，
+        // 状态相当于从「待审核」直接跳到「已完成」，历史记录里看不出中间通过过。
+        // 这里只拦「通过」不拦「驳回」——驳回是清理过期待审队列的唯一出口，
+        // 若把驳回也拦住，这些记录就只能进数据库手改。
+        if (!book.getEndTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException(1001, "该申请的使用时间已结束，不能再审核为通过");
         }
-        if (!Integer.valueOf(BookStatus.PENDING).equals(book.getStatus())) {
-            throw new BusinessException(1001, "该申请已处理，不能重复审核");
+        // 先锁住会议室行，把同一会议室的审核串行化；
+        // 两个管理员同时点「通过」时，后一个会等前一个提交完再校验，避免双双通过造成重复占用。
+        roomMapper.lockById(book.getRoomId());
+        checkConflict(book.getRoomId(), book.getStartTime(), book.getEndTime(),
+                book.getId(), BookStatus.occupiedOnAudit());
+        bookMapper.updateStatus(bookId, BookStatus.APPROVED, trimToNull(dto.getAuditMsg()),
+                LocalDateTime.now());
+    }
+
+    /**
+     * 审核驳回：把状态从 0（待审核）改为 2（驳回）。
+     * <p>
+     * 驳回不涉及占用，因此不校验冲突，但必须填写理由，便于申请人知道该改什么。
+     * 已结束的申请允许驳回，原因见 {@link #approve} 里的说明。
+     *
+     * @param bookId 待审核的预定记录主键
+     * @param dto    审核结果，status 必须为 2，auditMsg 必填
+     * @throws BusinessException 结果非法、记录不存在、记录已被处理或未填理由时抛出
+     */
+    @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.BOOK_AUDIT_REJECT, target = "describe(#bookId)")
+    public void reject(Long bookId, AuditDTO dto) {
+        if (!Integer.valueOf(BookStatus.REJECTED).equals(dto.getStatus())) {
+            throw new BusinessException(400, "审核结果只能是通过或驳回");
         }
-        boolean reject = Integer.valueOf(BookStatus.REJECTED).equals(target);
-        if (reject && (dto.getAuditMsg() == null || dto.getAuditMsg().trim().isEmpty())) {
+        requirePending(bookId);
+        if (dto.getAuditMsg() == null || dto.getAuditMsg().trim().isEmpty()) {
             throw new BusinessException(400, "驳回时必须填写理由");
         }
-        if (!reject) {
-            // 已结束的申请不能再通过：否则通过后下一次定时任务立刻把它置为已完成，
-            // 状态相当于从「待审核」直接跳到「已完成」，历史记录里看不出中间通过过。
-            // 这里只拦「通过」不拦「驳回」——驳回是清理过期待审队列的唯一出口，
-            // 若把驳回也拦住，这些记录就只能进数据库手改。
-            if (!book.getEndTime().isAfter(LocalDateTime.now())) {
-                throw new BusinessException(1001, "该申请的使用时间已结束，不能再审核为通过");
-            }
-            // 先锁住会议室行，把同一会议室的审核串行化；
-            // 两个管理员同时点「通过」时，后一个会等前一个提交完再校验，避免双双通过造成重复占用。
-            roomMapper.lockById(book.getRoomId());
-            checkConflict(book.getRoomId(), book.getStartTime(), book.getEndTime(),
-                    book.getId(), BookStatus.occupiedOnAudit());
-        }
-        bookMapper.updateStatus(bookId, target,
-                dto.getAuditMsg() == null ? null : dto.getAuditMsg().trim(),
+        bookMapper.updateStatus(bookId, BookStatus.REJECTED, dto.getAuditMsg().trim(),
                 LocalDateTime.now());
     }
 
@@ -160,28 +174,53 @@ public class BookService {
      * 状态为 3 的记录不再参与冲突判定，所以取消等同于释放该时段。
      * 只允许取消「待审核」与「已通过」的记录，并且必须在会议开始之前操作，
      * 已经开始的会议不能事后取消，否则历史记录会失去意义。
+     * <p>
+     * 本方法只处理「本人取消本人」。管理员取消他人的预定走管理端的
+     * {@link #adminCancel}：那个动作影响他人利益，必须留下理由，且要记入操作日志。
+     * <p>
+     * 取消只写 status / cancel_reason / cancel_time 三列，不再复用审核用的 updateStatus，
+     * 否则「审核通过 → 取消」的记录会丢掉审核时间。
      *
      * @param bookId 预定记录主键
-     * @param userId 当前登录用户 ID，用于判断是否为本人预定
-     * @throws BusinessException 记录不存在、非本人且非管理员、状态不允许、会议已开始时抛出
+     * @param userId 当前登录用户 ID
+     * @throws BusinessException 记录不存在、非本人、状态不允许、会议已开始时抛出
      */
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long bookId, Long userId) {
-        MeetingBook book = bookMapper.findById(bookId);
-        if (book == null) {
-            throw new BusinessException(1001, "预定记录不存在");
-        }
-        boolean self = book.getUserId().equals(userId);
-        if (!self && !UserContext.isAdmin()) {
+        MeetingBook book = requireBook(bookId);
+        if (!book.getUserId().equals(userId)) {
             throw new BusinessException(403, "只能取消本人的预定");
         }
-        if (!BookStatus.cancellable(book.getStatus())) {
-            throw new BusinessException(1001, "当前状态的预定不可取消");
+        ensureCancellable(book);
+        bookMapper.cancelById(bookId, BookStatus.CANCELLED, null, LocalDateTime.now());
+    }
+
+    /**
+     * 管理员取消他人的预定（行政取消）。
+     * <p>
+     * 这个能力必须保留：员工离职、会议室被临时征用、重要接待需要清场，都属于
+     * 「本人已经联系不上但会议室还被占着」的情形，收回权限就只能进数据库手改。
+     * 但它是有代价的动作，所以做了三条约束：
+     * <ol>
+     *   <li>只挂在 {@code /api/admin/**} 下，与其它管理动作一致，普通用户调不到；</li>
+     *   <li>理由必填并落库，被取消的人能在「我的预定」里看到为什么被取消；</li>
+     *   <li>记入操作日志，事后可查是谁在什么时候取消了谁的会议。</li>
+     * </ol>
+     *
+     * @param bookId 预定记录主键
+     * @param dto    取消理由，必填
+     * @throws BusinessException 理由为空、记录不存在、状态不允许、会议已开始时抛出
+     */
+    @Transactional(rollbackFor = Exception.class)
+    @LogOperation(type = OperationType.BOOK_CANCEL_ADMIN, target = "describe(#bookId)")
+    public void adminCancel(Long bookId, CancelDTO dto) {
+        if (dto.getReason() == null || dto.getReason().trim().isEmpty()) {
+            throw new BusinessException(400, "取消他人预定必须填写理由");
         }
-        if (!book.getStartTime().isAfter(LocalDateTime.now())) {
-            throw new BusinessException(1001, "会议已开始或已结束，不能取消");
-        }
-        bookMapper.updateStatus(bookId, BookStatus.CANCELLED, null, null);
+        MeetingBook book = requireBook(bookId);
+        ensureCancellable(book);
+        bookMapper.cancelById(bookId, BookStatus.CANCELLED, dto.getReason().trim(),
+                LocalDateTime.now());
     }
 
     /**
@@ -248,6 +287,58 @@ public class BookService {
     }
 
     // ------------------------------------------------------------ 私有校验逻辑
+
+    /**
+     * 供操作日志取对象的可读描述，形如「第一会议室 2026-11-20 09:00 至 10:00」。
+     * <p>
+     * 由切面的 SpEL 表达式调用（见 {@code @LogOperation(target = "describe(#bookId)")}）。
+     * 审核、取消这些方法只拿到主键，光记一个 id 事后看不出动的是哪场会议。
+     * 取不到时返回 null，切面会忽略，不影响业务。
+     */
+    public String describe(Long bookId) {
+        BookVO vo = bookMapper.findVOById(bookId);
+        if (vo == null) {
+            return null;
+        }
+        return vo.getRoomName() + " " + vo.getStartTime().format(TIME_FORMAT)
+                + " 至 " + vo.getEndTime().format(TIME_FORMAT);
+    }
+
+    /** 按主键取记录，查不到直接抛业务异常，作为写操作前的存在性断言 */
+    private MeetingBook requireBook(Long bookId) {
+        MeetingBook book = bookMapper.findById(bookId);
+        if (book == null) {
+            throw new BusinessException(1001, "预定记录不存在");
+        }
+        return book;
+    }
+
+    /** 审核前断言：记录必须处于「待审核」，已处理过的不能重复审核 */
+    private MeetingBook requirePending(Long bookId) {
+        MeetingBook book = requireBook(bookId);
+        if (!Integer.valueOf(BookStatus.PENDING).equals(book.getStatus())) {
+            throw new BusinessException(1001, "该申请已处理，不能重复审核");
+        }
+        return book;
+    }
+
+    /**
+     * 取消前的共同断言：状态允许取消，且会议尚未开始。
+     * 本人取消与管理员取消共用，保证两条路径的规则不会各走一套。
+     */
+    private void ensureCancellable(MeetingBook book) {
+        if (!BookStatus.cancellable(book.getStatus())) {
+            throw new BusinessException(1001, "当前状态的预定不可取消");
+        }
+        if (!book.getStartTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException(1001, "会议已开始或已结束，不能取消");
+        }
+    }
+
+    /** 去空格，空白串按 null 处理，避免库里出现空字符串 */
+    private String trimToNull(String text) {
+        return text == null || text.trim().isEmpty() ? null : text.trim();
+    }
 
     /**
      * 时间区间合法性校验。全部在后端判断，不依赖前端时间控件。

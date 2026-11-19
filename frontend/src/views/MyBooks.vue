@@ -26,7 +26,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="auditMsg" label="审核意见" min-width="140" show-overflow-tooltip />
+        <el-table-column label="处理说明" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.status === 3 ? (row.cancelReason ? '管理员取消：' + row.cancelReason : '本人取消') : (row.auditMsg || '—') }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="100" align="center">
           <template #default="{ row }">
             <el-button v-if="row.status === 0 || row.status === 1" type="danger" link
@@ -51,6 +55,9 @@
  * 只查本人记录：请求不带 userId，后端按令牌取当前用户，前端改参数也查不到别人的。
  * 「取消」按钮只在状态为待审核（0）或已通过（1）时显示，
  * 但时间是否已经过去前端不判断——已开始的会议由后端拦下并给出提示。
+ *
+ * 「处理说明」一列按状态切换内容：已取消看取消理由（管理员取消时必填，
+ * 本人取消时该字段为空），其余状态看审核意见。
  */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

@@ -46,6 +46,12 @@ public class BookVO {
     /** 审核时间 */
     private LocalDateTime auditTime;
 
+    /** 取消理由 */
+    private String cancelReason;
+
+    /** 取消时间 */
+    private LocalDateTime cancelTime;
+
     /** 提交时间 */
     private LocalDateTime createTime;
 
@@ -159,6 +165,22 @@ public class BookVO {
 
     public void setAuditTime(LocalDateTime auditTime) {
         this.auditTime = auditTime;
+    }
+
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    public void setCancelReason(String cancelReason) {
+        this.cancelReason = cancelReason;
+    }
+
+    public LocalDateTime getCancelTime() {
+        return cancelTime;
+    }
+
+    public void setCancelTime(LocalDateTime cancelTime) {
+        this.cancelTime = cancelTime;
     }
 
     public LocalDateTime getCreateTime() {

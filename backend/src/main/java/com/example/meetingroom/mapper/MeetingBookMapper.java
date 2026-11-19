@@ -44,6 +44,21 @@ public interface MeetingBookMapper {
                      @Param("auditTime") LocalDateTime auditTime);
 
     /**
+     * 取消预定：只写状态、取消理由与取消时间，不动 audit_msg / audit_time。
+     * <p>
+     * 与 updateStatus 分开是必需的——取消若复用审核语句，会把已有的审核痕迹清空，
+     * 「审核通过 → 取消」的记录就再也看不出何时被审批过。同样的理由让 completeExpired
+     * 也没有复用 updateStatus。
+     *
+     * @param cancelReason 管理员取消他人预定时必填，本人取消传 null
+     * @param cancelTime   取消时间，由服务层取当前时间
+     */
+    int cancelById(@Param("id") Long id,
+                   @Param("status") Integer status,
+                   @Param("cancelReason") String cancelReason,
+                   @Param("cancelTime") LocalDateTime cancelTime);
+
+    /**
      * 定时任务专用：把使用时间已结束的预定批量置为已完成。
      * <p>
      * 只更新 status 一列，不动 audit_msg / audit_time（这与 updateStatus 的区别，

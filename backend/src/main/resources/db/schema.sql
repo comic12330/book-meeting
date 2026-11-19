@@ -65,6 +65,8 @@ CREATE TABLE `meeting_book` (
     `status`          TINYINT         NOT NULL DEFAULT 0      COMMENT '状态：0 待审核，1 通过，2 驳回，3 取消，4 已完成',
     `audit_msg`       VARCHAR(255)    DEFAULT NULL            COMMENT '审核意见 / 驳回理由',
     `audit_time`      DATETIME        DEFAULT NULL            COMMENT '审核时间',
+    `cancel_reason`   VARCHAR(255)    DEFAULT NULL            COMMENT '取消理由：管理员取消他人预定时必填，本人取消为空',
+    `cancel_time`     DATETIME        DEFAULT NULL            COMMENT '取消时间',
     `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间',
     PRIMARY KEY (`id`),
     KEY `idx_book_room_start` (`room_id`, `start_time`),

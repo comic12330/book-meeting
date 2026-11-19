@@ -1,7 +1,10 @@
 package com.example.meetingroom.service;
 
+import com.example.meetingroom.common.BookStatus;
 import com.example.meetingroom.common.BusinessException;
 import com.example.meetingroom.common.PageResult;
+import com.example.meetingroom.common.RoomStatus;
+import com.example.meetingroom.common.SysConfigKey;
 import com.example.meetingroom.common.UserContext;
 import com.example.meetingroom.dto.AuditDTO;
 import com.example.meetingroom.dto.BookQueryDTO;
@@ -19,9 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.annotation.Resource;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -36,29 +38,26 @@ import java.util.List;
  *       保证两条时段重叠的待审申请中只有一条能通过。</li>
  * </ul>
  * 两个环节用的是同一个判定方法 {@link #checkConflict}，差异只在参与判定的状态集合，
- * 见 {@link #OCCUPIED_ON_SUBMIT} 与 {@link #OCCUPIED_ON_AUDIT}。
+ * 见 {@link BookStatus#occupiedOnSubmit()} 与 {@link BookStatus#occupiedOnAudit()}。
+ * <p>
+ * 时间规则（单次时长上限、最多提前天数、每日可预定窗口）全部来自 sys_config 表，
+ * 由管理员在「系统参数」页面维护，见 {@link SysConfigService}。改值即时生效，不需要重启。
  */
 @Service
 public class BookService {
 
-    /** 单次预定最长时长（小时），防止误填超长时间段 */
-    private static final long MAX_HOURS = 72L;
-
-    /** 提交环节参与冲突判定的状态：待审核与已通过都算占用，避免同一时段被反复提交 */
-    private static final List<Integer> OCCUPIED_ON_SUBMIT =
-            Collections.unmodifiableList(Arrays.asList(0, 1));
-
-    /** 审核环节参与冲突判定的状态：只有已通过才算真正占用 */
-    private static final List<Integer> OCCUPIED_ON_AUDIT =
-            Collections.singletonList(1);
-
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    private static final DateTimeFormatter CLOCK_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     @Resource
     private MeetingBookMapper bookMapper;
 
     @Resource
     private MeetingRoomMapper roomMapper;
+
+    @Resource
+    private SysConfigService configService;
 
     /**
      * 提交预定申请，写入一条状态为 0（待审核）的记录。
@@ -68,7 +67,7 @@ public class BookService {
      * 冲突校验要扫预定表，放在最后可以避免为明显非法的请求多查一次库。
      * <p>
      * 冲突校验在提交环节执行一次，参与判定的状态是「待审核 + 已通过」，
-     * 详见 {@link #OCCUPIED_ON_SUBMIT}。
+     * 详见 {@link BookStatus#occupiedOnSubmit()}。
      *
      * @param dto    提交表单，已由 BookSubmitDTO 上的注解做过格式校验
      * @param userId 当前登录用户，由拦截器写入上下文，不接受前端传入
@@ -81,7 +80,7 @@ public class BookService {
         if (room == null) {
             throw new BusinessException(1001, "会议室不存在");
         }
-        if (!Integer.valueOf(1).equals(room.getStatus())) {
+        if (!RoomStatus.isEnabled(room.getStatus())) {
             throw new BusinessException(1001, "该会议室已停用，暂不可预定");
         }
         checkTimeRange(dto.getStartTime(), dto.getEndTime());
@@ -89,7 +88,8 @@ public class BookService {
             throw new BusinessException(1001,
                     "参会人数超过会议室容纳上限（" + room.getCapacity() + " 人）");
         }
-        checkConflict(dto.getRoomId(), dto.getStartTime(), dto.getEndTime(), null, OCCUPIED_ON_SUBMIT);
+        checkConflict(dto.getRoomId(), dto.getStartTime(), dto.getEndTime(), null,
+                BookStatus.occupiedOnSubmit());
 
         MeetingBook book = new MeetingBook();
         book.setUserId(userId);
@@ -98,7 +98,7 @@ public class BookService {
         book.setEndTime(dto.getEndTime());
         book.setPurpose(dto.getPurpose().trim());
         book.setParticipantNum(dto.getParticipantNum());
-        book.setStatus(0);
+        book.setStatus(BookStatus.PENDING);
         bookMapper.insert(book);
         return book.getId();
     }
@@ -121,17 +121,17 @@ public class BookService {
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long bookId, AuditDTO dto) {
         Integer target = dto.getStatus();
-        if (!Integer.valueOf(1).equals(target) && !Integer.valueOf(2).equals(target)) {
+        if (!BookStatus.isAuditResult(target)) {
             throw new BusinessException(400, "审核结果只能是通过或驳回");
         }
         MeetingBook book = bookMapper.findById(bookId);
         if (book == null) {
             throw new BusinessException(1001, "预定记录不存在");
         }
-        if (!Integer.valueOf(0).equals(book.getStatus())) {
+        if (!Integer.valueOf(BookStatus.PENDING).equals(book.getStatus())) {
             throw new BusinessException(1001, "该申请已处理，不能重复审核");
         }
-        boolean reject = Integer.valueOf(2).equals(target);
+        boolean reject = Integer.valueOf(BookStatus.REJECTED).equals(target);
         if (reject && (dto.getAuditMsg() == null || dto.getAuditMsg().trim().isEmpty())) {
             throw new BusinessException(400, "驳回时必须填写理由");
         }
@@ -140,7 +140,7 @@ public class BookService {
             // 两个管理员同时点「通过」时，后一个会等前一个提交完再校验，避免双双通过造成重复占用。
             roomMapper.lockById(book.getRoomId());
             checkConflict(book.getRoomId(), book.getStartTime(), book.getEndTime(),
-                    book.getId(), OCCUPIED_ON_AUDIT);
+                    book.getId(), BookStatus.occupiedOnAudit());
         }
         bookMapper.updateStatus(bookId, target,
                 dto.getAuditMsg() == null ? null : dto.getAuditMsg().trim(),
@@ -168,13 +168,13 @@ public class BookService {
         if (!self && !UserContext.isAdmin()) {
             throw new BusinessException(403, "只能取消本人的预定");
         }
-        if (!Integer.valueOf(0).equals(book.getStatus()) && !Integer.valueOf(1).equals(book.getStatus())) {
+        if (!BookStatus.cancellable(book.getStatus())) {
             throw new BusinessException(1001, "当前状态的预定不可取消");
         }
         if (!book.getStartTime().isAfter(LocalDateTime.now())) {
             throw new BusinessException(1001, "会议已开始或已结束，不能取消");
         }
-        bookMapper.updateStatus(bookId, 3, null, null);
+        bookMapper.updateStatus(bookId, BookStatus.CANCELLED, null, null);
     }
 
     /**
@@ -219,8 +219,20 @@ public class BookService {
     // ------------------------------------------------------------ 私有校验逻辑
 
     /**
-     * 时间区间合法性：结束晚于开始、不早于当前时间、单次不超过上限。
-     * 全部在后端判断，不依赖前端时间控件。
+     * 时间区间合法性校验。全部在后端判断，不依赖前端时间控件。
+     * <p>
+     * 四条规则，前两条是固定业务常识，后两条的阈值来自 sys_config，管理员可在线调整：
+     * <ol>
+     *   <li>结束必须晚于开始；</li>
+     *   <li>开始不能早于当前时刻（精确到分钟）；</li>
+     *   <li>最多提前 {@code booking.max-advance-days} 天，防止长期占位；</li>
+     *   <li>开始时刻必须落在 {@code booking.daily-start} ~ {@code booking.daily-end} 之间。</li>
+     * </ol>
+     * 另外限制单次跨度不超过 {@code booking.max-hours} 小时。
+     * <p>
+     * 注意第 4 条只约束<b>开始时刻</b>：任务书要求支持跨天（如 19:00 至次日 01:00），
+     * 若把结束时刻也限制在同一天的可预定窗口内，跨天场景就无法提交了。
+     * 结束时间通过「跨度上限」间接约束，不会被无限拉长。
      */
     private void checkTimeRange(LocalDateTime start, LocalDateTime end) {
         if (start == null || end == null) {
@@ -233,9 +245,24 @@ public class BookService {
         if (start.isBefore(nowMinute)) {
             throw new BusinessException(1001, "开始时间不能早于当前时间");
         }
-        long hours = Duration.between(start, end).toHours();
-        if (hours > MAX_HOURS) {
-            throw new BusinessException(1001, "单次预定不能超过 " + MAX_HOURS + " 小时");
+
+        int maxAdvanceDays = configService.getInt(SysConfigKey.BOOKING_MAX_ADVANCE_DAYS);
+        if (start.isAfter(nowMinute.plusDays(maxAdvanceDays))) {
+            throw new BusinessException(1001,
+                    "最多只能提前 " + maxAdvanceDays + " 天预定，请调整开始日期");
+        }
+
+        LocalTime dailyStart = configService.getTime(SysConfigKey.BOOKING_DAILY_START);
+        LocalTime dailyEnd = configService.getTime(SysConfigKey.BOOKING_DAILY_END);
+        LocalTime startClock = start.toLocalTime();
+        if (startClock.isBefore(dailyStart) || startClock.isAfter(dailyEnd)) {
+            throw new BusinessException(1001, "开始时间需在每日 "
+                    + dailyStart.format(CLOCK_FORMAT) + " 至 " + dailyEnd.format(CLOCK_FORMAT) + " 之间");
+        }
+
+        long maxHours = configService.getLong(SysConfigKey.BOOKING_MAX_HOURS);
+        if (Duration.between(start, end).toMinutes() > maxHours * 60) {
+            throw new BusinessException(1001, "单次预定不能超过 " + maxHours + " 小时");
         }
     }
 

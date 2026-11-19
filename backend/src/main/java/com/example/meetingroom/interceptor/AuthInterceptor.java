@@ -3,6 +3,7 @@ package com.example.meetingroom.interceptor;
 import com.example.meetingroom.common.BusinessException;
 import com.example.meetingroom.common.LoginUser;
 import com.example.meetingroom.common.UserContext;
+import com.example.meetingroom.common.UserRole;
 import com.example.meetingroom.entity.User;
 import com.example.meetingroom.mapper.UserMapper;
 import com.example.meetingroom.util.TokenUtil;
@@ -49,12 +50,12 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (current == null) {
             throw new BusinessException(401, "账号不存在，请重新登录");
         }
-        if (!Integer.valueOf(1).equals(current.getStatus())) {
+        if (!UserRole.isEnabled(current.getStatus())) {
             throw new BusinessException(401, "账号已被停用，请联系管理员");
         }
         UserContext.set(new LoginUser(current.getId(), current.getUsername(), current.getRole()));
 
-        if (request.getRequestURI().startsWith("/api/admin/") && !Integer.valueOf(1).equals(current.getRole())) {
+        if (request.getRequestURI().startsWith("/api/admin/") && !UserRole.isAdmin(current.getRole())) {
             throw new BusinessException(403, "该操作仅管理员可执行");
         }
         return true;

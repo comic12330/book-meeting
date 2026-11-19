@@ -37,6 +37,10 @@
             <el-icon><Bell /></el-icon>
             <span>公告管理</span>
           </el-menu-item>
+          <el-menu-item index="/admin/configs">
+            <el-icon><Tools /></el-icon>
+            <span>系统参数</span>
+          </el-menu-item>
         </template>
       </el-menu>
     </el-aside>

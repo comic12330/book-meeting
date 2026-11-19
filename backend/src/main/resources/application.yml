@@ -43,6 +43,11 @@ meeting:
   token:
     secret: meeting-room-2026-hmac-secret
     expire-seconds: 7200
+  # 分页属技术保护参数，放配置文件由部署方掌握，不给管理员在线改
+  # 业务运营参数（时长上限、可预定时段、容量上限）在 sys_config 表，见「系统参数」页面
+  page:
+    default-size: 10
+    max-size: 100
 
 logging:
   level:

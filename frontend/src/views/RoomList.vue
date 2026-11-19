@@ -9,8 +9,8 @@
           <el-input v-model="query.location" placeholder="如 行政楼" clearable style="width: 150px" />
         </el-form-item>
         <el-form-item label="最少容纳">
-          <el-input-number v-model="query.minCapacity" :min="1" :max="500" controls-position="right"
-                           style="width: 120px" />
+          <el-input-number v-model="query.minCapacity" :min="1" :max="limit.maxCapacity || undefined"
+                           controls-position="right" style="width: 120px" />
         </el-form-item>
         <el-form-item label="设备">
           <el-select v-model="query.equipment" placeholder="不限" clearable style="width: 150px">
@@ -47,23 +47,26 @@
     </el-card>
 
     <el-dialog v-model="dialogVisible" title="提交预定申请" width="520px">
+      <el-alert v-if="limitText" class="rule" type="info" :closable="false" :title="limitText" />
       <el-form ref="bookFormRef" :model="bookForm" :rules="bookRules" label-width="90px">
         <el-form-item label="会议室">
           <el-input :model-value="currentRoom.roomName" disabled />
         </el-form-item>
         <el-form-item label="开始时间" prop="startTime">
           <el-date-picker v-model="bookForm.startTime" type="datetime" placeholder="选择开始时间"
-                          value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
+                          value-format="YYYY-MM-DD HH:mm:ss" :disabled-date="disabledDate"
+                          style="width: 100%" />
         </el-form-item>
         <el-form-item label="结束时间" prop="endTime">
           <el-date-picker v-model="bookForm.endTime" type="datetime" placeholder="选择结束时间（可跨天）"
-                          value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
+                          value-format="YYYY-MM-DD HH:mm:ss" :disabled-date="disabledDate"
+                          style="width: 100%" />
         </el-form-item>
         <el-form-item label="会议用途" prop="purpose">
           <el-input v-model="bookForm.purpose" type="textarea" :rows="2" placeholder="简要说明会议用途" />
         </el-form-item>
         <el-form-item label="参会人数" prop="participantNum">
-          <el-input-number v-model="bookForm.participantNum" :min="1" :max="currentRoom.capacity || 500" />
+          <el-input-number v-model="bookForm.participantNum" :min="1" :max="currentRoom.capacity" />
           <span class="capacity-tip">该会议室容纳上限 {{ currentRoom.capacity }} 人</span>
         </el-form-item>
       </el-form>
@@ -83,15 +86,43 @@
  * 本页的校验只承担「让用户少走一趟」的作用：必填、结束晚于开始、人数不超容量。
  * 时段是否与已有预定冲突、开始时间是否已经过去，前端一律不判断——
  * 那属于必须由后端把关的规则，前端算不算都不影响最终结果。
+ *
+ * 可预定窗口（每日起止时刻、最多提前天数、单次时长上限）从 /api/configs 读取，
+ * 用来限制日期选择器与提示文案。这些值由管理员在「系统参数」页面维护，
+ * 前端只负责展示同一套口径，真正的判定仍在后端。
  */
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getRooms, submitBook } from '../api'
+import { getRooms, submitBook, getConfigs } from '../api'
 import { EQUIPMENTS, equipmentText } from '../utils/dict'
 
 const loading = ref(false)
 const rooms = ref([])
 const total = ref(0)
+
+// 可预定窗口，全部来自后端配置；取不到时留空，前端不额外限制
+const limit = reactive({
+  maxCapacity: 0,
+  maxHours: 0,
+  maxAdvanceDays: 0,
+  dailyStart: '',
+  dailyEnd: ''
+})
+
+const limitText = computed(() => {
+  const parts = []
+  if (limit.dailyStart && limit.dailyEnd) {
+    parts.push(`每日 ${limit.dailyStart}–${limit.dailyEnd} 之间开始`)
+  }
+  if (limit.maxAdvanceDays > 0) {
+    parts.push(`最多提前 ${limit.maxAdvanceDays} 天`)
+  }
+  if (limit.maxHours > 0) {
+    parts.push(`单次不超过 ${limit.maxHours} 小时`)
+  }
+  parts.push('结束时间可跨到次日')
+  return parts.join('，')
+})
 
 const query = reactive({
   pageNum: 1,
@@ -143,6 +174,36 @@ function reset() {
   load(1)
 }
 
+/** 读取可预定窗口；失败时不阻断页面，仅不显示限制提示，最终由后端校验 */
+async function loadLimit() {
+  try {
+    const res = await getConfigs()
+    const data = res.data || {}
+    limit.maxCapacity = Number(data['room.max-capacity'] || 0)
+    limit.maxHours = Number(data['booking.max-hours'] || 0)
+    limit.maxAdvanceDays = Number(data['booking.max-advance-days'] || 0)
+    limit.dailyStart = data['booking.daily-start'] || ''
+    limit.dailyEnd = data['booking.daily-end'] || ''
+  } catch (e) {
+    // 忽略：配置读不到只影响前端提示，不影响提交
+  }
+}
+
+/** 日期选择器禁用：早于今天、超出最多提前天数的日期 */
+function disabledDate(date) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (date.getTime() < today.getTime()) {
+    return true
+  }
+  if (limit.maxAdvanceDays > 0) {
+    const last = new Date(today)
+    last.setDate(last.getDate() + limit.maxAdvanceDays)
+    return date.getTime() > last.getTime()
+  }
+  return false
+}
+
 function openBook(room) {
   currentRoom.value = room
   bookForm.roomId = room.id
@@ -174,12 +235,19 @@ async function onSubmit() {
   }
 }
 
-onMounted(() => load())
+onMounted(() => {
+  load()
+  loadLimit()
+})
 </script>
 
 <style scoped>
 .mt {
   margin-top: 16px;
+}
+
+.rule {
+  margin-bottom: 14px;
 }
 
 .capacity-tip {

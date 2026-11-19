@@ -38,3 +38,7 @@ export const adminSaveUser = (data) => request.post('/admin/users', data)
 export const adminUpdateUser = (id, data) => request.put(`/admin/users/${id}`, data)
 export const adminUpdateUserStatus = (id, status) => request.put(`/admin/users/${id}/status/${status}`)
 export const adminResetPassword = (id, data) => request.put(`/admin/users/${id}/password`, data)
+
+export const getConfigs = () => request.get('/configs')
+export const adminGetConfigs = () => request.get('/admin/configs')
+export const adminSaveConfig = (data) => request.put('/admin/configs', data)

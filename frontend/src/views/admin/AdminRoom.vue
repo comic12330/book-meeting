@@ -48,7 +48,8 @@
           <el-input v-model="form.roomName" />
         </el-form-item>
         <el-form-item label="容纳人数" prop="capacity">
-          <el-input-number v-model="form.capacity" :min="1" :max="500" />
+          <el-input-number v-model="form.capacity" :min="1" :max="maxCapacity || undefined" />
+          <span v-if="maxCapacity" class="limit-tip">上限 {{ maxCapacity }} 人，可在「系统参数」调整</span>
         </el-form-item>
         <el-form-item label="位置" prop="location">
           <el-input v-model="form.location" placeholder="如 行政楼 3 层 301" />
@@ -88,7 +89,7 @@
  */
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminGetRooms, adminSaveRoom, adminUpdateRoom, adminDeleteRoom } from '../../api'
+import { adminGetRooms, adminSaveRoom, adminUpdateRoom, adminDeleteRoom, adminGetConfigs } from '../../api'
 import { EQUIPMENTS, ROOM_STATUS, equipmentText } from '../../utils/dict'
 
 const loading = ref(false)
@@ -96,6 +97,9 @@ const saving = ref(false)
 const list = ref([])
 const total = ref(0)
 const query = reactive({ pageNum: 1, pageSize: 10, roomName: '', status: undefined })
+
+// 容纳人数上限来自 sys_config（管理员可在「系统参数」调整），0 表示未取到、前端不设上限
+const maxCapacity = ref(0)
 
 const dialogVisible = ref(false)
 const formRef = ref(null)
@@ -174,5 +178,28 @@ async function onDelete(row) {
   load()
 }
 
-onMounted(() => load())
+onMounted(() => {
+  load()
+  loadMaxCapacity()
+})
+
+async function loadMaxCapacity() {
+  try {
+    const res = await adminGetConfigs()
+    const item = (res.data || []).find((x) => x.configKey === 'room.max-capacity')
+    if (item) {
+      maxCapacity.value = Number(item.configValue) || 0
+    }
+  } catch (e) {
+    // 读不到配置不影响增删改查，后端仍会按配置校验
+  }
+}
 </script>
+
+<style scoped>
+.limit-tip {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+</style>

@@ -87,6 +87,23 @@ CREATE TABLE `notice` (
     KEY `idx_notice_show` (`is_show`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '公告表';
 
+-- ------------------------------------------------------------
+-- 系统业务参数表
+-- 存放管理员可在线调整的运营参数（时长上限、可预定时段、容量上限等）。
+-- 技术参数（令牌密钥、分页上下限）仍在 application.yml，不在此表。
+-- 参数项由本脚本写入，页面只允许改值，不允许增删键名。
+-- ------------------------------------------------------------
+CREATE TABLE `sys_config` (
+    `config_key`   VARCHAR(64)  NOT NULL                COMMENT '参数键，与代码中的 SysConfigKey 枚举一一对应',
+    `config_value` VARCHAR(255) NOT NULL                COMMENT '参数值',
+    `config_name`  VARCHAR(64)  NOT NULL                COMMENT '参数名称',
+    `unit`         VARCHAR(16)  DEFAULT ''              COMMENT '单位',
+    `remark`       VARCHAR(255) DEFAULT ''              COMMENT '说明',
+    `sort_no`      INT          NOT NULL DEFAULT 0      COMMENT '排序号',
+    `update_time`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+    PRIMARY KEY (`config_key`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统业务参数表';
+
 -- ============================================================
 -- 初始化数据（所有账号初始密码均为 123456，存储 MD5 摘要）
 -- MD5('123456') = e10adc3949ba59abbe56e057f20f883e
@@ -111,3 +128,11 @@ INSERT INTO `meeting_book` (`user_id`, `room_id`, `start_time`, `end_time`, `pur
 INSERT INTO `notice` (`title`, `content`, `publisher_id`, `is_show`) VALUES
 ('会议室预定系统上线通知', '即日起会议室预定统一在本系统提交，线下登记与群内口头预约不再生效。', 1, 1),
 ('预定冲突处理规范', '同一会议室同一时段仅允许一条有效记录，提交与审核环节均会校验，请勿重复提交。', 1, 1);
+
+-- 业务参数初始值。取值范围由 SysConfigKey 枚举约束，页面提交时会校验。
+INSERT INTO `sys_config` (`config_key`, `config_value`, `config_name`, `unit`, `remark`, `sort_no`) VALUES
+('booking.max-hours',       '72',   '单次预定最长时长',       '小时', '单笔预定的起止时间跨度上限，超出则拒绝提交', 10),
+('booking.max-advance-days','30',   '最多提前预定天数',       '天',   '开始时间距今天数超过该值时拒绝提交，防止长期占位', 20),
+('booking.daily-start',     '07:00','每日可预定起始时间',     '',     '开始时间早于该时刻的申请会被拒绝，格式 HH:mm', 30),
+('booking.daily-end',       '23:00','每日最晚开始时间',       '',     '开始时间晚于该时刻的申请会被拒绝；结束时间允许跨到次日，不受此限', 40),
+('room.max-capacity',       '500',  '会议室容纳人数上限',     '人',   '新增或编辑会议室时，容纳人数不得超过该值', 50);

@@ -29,7 +29,7 @@ public final class UserContext {
     /** 判断当前用户是否管理员，用于服务层做数据归属校验 */
     public static boolean isAdmin() {
         LoginUser user = HOLDER.get();
-        return user != null && Integer.valueOf(1).equals(user.getRole());
+        return user != null && UserRole.isAdmin(user.getRole());
     }
 
     /**

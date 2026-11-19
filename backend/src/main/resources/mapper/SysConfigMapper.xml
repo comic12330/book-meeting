@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.meetingroom.mapper.SysConfigMapper">
+
+    <!--
+        业务参数表。参数项本身由初始化脚本写入，代码只读不改结构；
+        管理员的「编辑」只更新 config_value，键名是代码与数据之间的契约，不允许在页面上增删。
+    -->
+
+    <select id="selectAll" resultType="com.example.meetingroom.entity.SysConfig">
+        SELECT config_key, config_value, config_name, unit, remark, sort_no, update_time
+        FROM sys_config
+        ORDER BY sort_no ASC, config_key ASC
+    </select>
+
+    <update id="updateValue">
+        UPDATE sys_config
+        SET config_value = #{configValue}
+        WHERE config_key = #{configKey}
+    </update>
+</mapper>

@@ -1,5 +1,6 @@
 package com.example.meetingroom.dto;
 
+import com.example.meetingroom.common.PasswordPolicy;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Pattern;
@@ -17,7 +18,8 @@ public class UserSaveDTO {
     private String username;
 
     /** 初始密码，仅新增时使用 */
-    @Size(min = 6, max = 32, message = "密码长度需在 6-32 位之间")
+    @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH,
+            message = "密码长度需在 6-32 位之间")
     private String password;
 
     @NotBlank(message = "请输入真实姓名")

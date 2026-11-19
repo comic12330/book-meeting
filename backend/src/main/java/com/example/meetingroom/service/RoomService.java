@@ -2,6 +2,8 @@ package com.example.meetingroom.service;
 
 import com.example.meetingroom.common.BusinessException;
 import com.example.meetingroom.common.PageResult;
+import com.example.meetingroom.common.RoomStatus;
+import com.example.meetingroom.common.SysConfigKey;
 import com.example.meetingroom.dto.RoomQueryDTO;
 import com.example.meetingroom.dto.RoomSaveDTO;
 import com.example.meetingroom.entity.MeetingRoom;
@@ -23,6 +25,9 @@ import java.util.List;
  * <p>
  * 删除做了一层保护——只要存在历史预定记录就不允许物理删除，引导改为「停用」，
  * 否则预定表里的 room_id 会指向一条不存在的会议室，历史记录无法追溯。
+ * <p>
+ * 容纳人数上限来自 sys_config 的 {@code room.max-capacity}，管理员可在线调整，
+ * 不再写死在代码或前端控件里。
  */
 @Service
 public class RoomService {
@@ -33,9 +38,12 @@ public class RoomService {
     @Resource
     private MeetingBookMapper bookMapper;
 
+    @Resource
+    private SysConfigService configService;
+
     /** 用户端：只能看到启用中的会议室 */
     public PageResult<MeetingRoom> pageForUser(RoomQueryDTO query) {
-        query.setStatus(1);
+        query.setStatus(RoomStatus.ENABLED);
         return doPage(query);
     }
 
@@ -76,6 +84,7 @@ public class RoomService {
      */
     @Transactional(rollbackFor = Exception.class)
     public Long save(RoomSaveDTO dto) {
+        checkCapacity(dto.getCapacity());
         MeetingRoom room = toEntity(dto);
         roomMapper.insert(room);
         return room.getId();
@@ -90,6 +99,7 @@ public class RoomService {
     @Transactional(rollbackFor = Exception.class)
     public void update(Long id, RoomSaveDTO dto) {
         get(id);
+        checkCapacity(dto.getCapacity());
         MeetingRoom room = toEntity(dto);
         room.setId(id);
         roomMapper.update(room);
@@ -110,6 +120,23 @@ public class RoomService {
     }
 
     /**
+     * 容纳人数上限校验。
+     * <p>
+     * 下限 1 由 {@link RoomSaveDTO} 的 {@code @Min(1)} 保证，上限读配置
+     * （{@code room.max-capacity}），因为它是管理员可调整的运营参数而非固定规则。
+     * 前端控件上的最大值也从同一个参数取，两处口径一致。
+     */
+    private void checkCapacity(Integer capacity) {
+        if (capacity == null) {
+            throw new BusinessException(400, "请输入容纳人数");
+        }
+        int max = configService.getInt(SysConfigKey.ROOM_MAX_CAPACITY);
+        if (capacity > max) {
+            throw new BusinessException(1001, "容纳人数不能超过 " + max + " 人");
+        }
+    }
+
+    /**
      * 把保存表单转换成实体，并统一做去空格与默认值处理。
      * <p>
      * 设备与备注允许为空，统一存空串而不是 null，避免前端回显时出现 "null" 字样；
@@ -121,7 +148,7 @@ public class RoomService {
         room.setCapacity(dto.getCapacity());
         room.setLocation(dto.getLocation().trim());
         room.setEquipment(dto.getEquipment() == null ? "" : dto.getEquipment().trim());
-        room.setStatus(dto.getStatus() == null ? 1 : dto.getStatus());
+        room.setStatus(dto.getStatus() == null ? RoomStatus.ENABLED : dto.getStatus());
         room.setRemark(dto.getRemark() == null ? "" : dto.getRemark().trim());
         return room;
     }

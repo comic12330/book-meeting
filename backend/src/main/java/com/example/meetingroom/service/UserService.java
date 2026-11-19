@@ -3,6 +3,7 @@ package com.example.meetingroom.service;
 import com.example.meetingroom.common.BusinessException;
 import com.example.meetingroom.common.PageResult;
 import com.example.meetingroom.common.UserContext;
+import com.example.meetingroom.common.UserRole;
 import com.example.meetingroom.dto.LoginDTO;
 import com.example.meetingroom.dto.PasswordDTO;
 import com.example.meetingroom.dto.RegisterDTO;
@@ -59,7 +60,7 @@ public class UserService {
             // 账号不存在与密码错误返回同一提示，避免被用来探测账号是否存在
             throw new BusinessException(1001, "账号或密码错误");
         }
-        if (!Integer.valueOf(1).equals(user.getStatus())) {
+        if (!UserRole.isEnabled(user.getStatus())) {
             throw new BusinessException(1001, "账号已被禁用，请联系管理员");
         }
         LoginVO vo = new LoginVO();
@@ -87,8 +88,8 @@ public class UserService {
         user.setPassword(Md5Util.encode(dto.getPassword()));
         user.setRealName(dto.getRealName().trim());
         user.setPhone(dto.getPhone());
-        user.setRole(0);
-        user.setStatus(1);
+        user.setRole(UserRole.NORMAL);
+        user.setStatus(UserRole.STATUS_ENABLED);
         userMapper.insert(user);
     }
 
@@ -200,12 +201,12 @@ public class UserService {
     public void updateByAdmin(Long id, UserSaveDTO dto) {
         User exist = requireUser(id);
         // 允许改自己的资料，但不能在编辑里顺手把自己停用，否则当场失去入口
-        if (id.equals(UserContext.userId()) && !Integer.valueOf(1).equals(dto.getStatus())) {
+        if (id.equals(UserContext.userId()) && !UserRole.isEnabled(dto.getStatus())) {
             throw new BusinessException(1001, "不能停用当前登录的账号");
         }
         // 降级是可以让系统失去管理入口的唯一路径：停用自己已被上一句拦住，
         // 而唯一的管理员只能是自己，所以「最后一名管理员」的判定实际只在降级时生效。
-        boolean demote = Integer.valueOf(1).equals(exist.getRole()) && !Integer.valueOf(1).equals(dto.getRole());
+        boolean demote = UserRole.isAdmin(exist.getRole()) && !UserRole.isAdmin(dto.getRole());
         if (demote) {
             ensureNotLastAdmin(id, "该账号是当前唯一启用的管理员，不能改为普通用户");
         }
@@ -227,11 +228,12 @@ public class UserService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void updateStatusByAdmin(Long id, Integer status) {
-        if (status == null || (status != 0 && status != 1)) {
+        if (status == null
+                || (status != UserRole.STATUS_DISABLED && status != UserRole.STATUS_ENABLED)) {
             throw new BusinessException(400, "账号状态只能为 0（禁用）或 1（可用）");
         }
         requireUser(id);
-        if (status == 0 && id.equals(UserContext.userId())) {
+        if (status == UserRole.STATUS_DISABLED && id.equals(UserContext.userId())) {
             throw new BusinessException(1001, "不能停用当前登录的账号");
         }
         userMapper.updateStatus(id, status);

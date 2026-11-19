@@ -1,5 +1,6 @@
 package com.example.meetingroom.dto;
 
+import com.example.meetingroom.common.PasswordPolicy;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
 
@@ -10,7 +11,8 @@ import javax.validation.constraints.Size;
 public class ResetPasswordDTO {
 
     @NotBlank(message = "请输入新密码")
-    @Size(min = 6, max = 32, message = "密码长度需在 6-32 位之间")
+    @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH,
+            message = "密码长度需在 6-32 位之间")
     private String newPassword;
 
     public String getNewPassword() {

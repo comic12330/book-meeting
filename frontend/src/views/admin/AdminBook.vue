@@ -20,8 +20,12 @@
           <template #default="{ row }">{{ row.realName }}</template>
         </el-table-column>
         <el-table-column prop="roomName" label="会议室" min-width="110" />
-        <el-table-column prop="startTime" label="开始时间" width="165" />
-        <el-table-column prop="endTime" label="结束时间" width="165" />
+        <el-table-column prop="startTime" label="开始时间" width="145">
+          <template #default="{ row }">{{ minuteText(row.startTime) }}</template>
+        </el-table-column>
+        <el-table-column prop="endTime" label="结束时间" width="145">
+          <template #default="{ row }">{{ minuteText(row.endTime) }}</template>
+        </el-table-column>
         <el-table-column prop="purpose" label="用途" min-width="130" show-overflow-tooltip />
         <el-table-column prop="participantNum" label="人数" width="70" align="center" />
         <el-table-column label="状态" width="95" align="center">
@@ -96,6 +100,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminGetBooks, adminAudit, adminCancelBook } from '../../api'
 import { BOOK_STATUS } from '../../utils/dict'
+import { minuteText } from '../../utils/format'
 
 const loading = ref(false)
 const auditing = ref(false)

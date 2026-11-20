@@ -54,12 +54,14 @@
         </el-form-item>
         <el-form-item label="开始时间" prop="startTime">
           <el-date-picker v-model="bookForm.startTime" type="datetime" placeholder="选择开始时间"
-                          value-format="YYYY-MM-DD HH:mm:ss" :disabled-date="disabledDate"
+                          format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm"
+                          :disabled-date="disabledDate"
                           style="width: 100%" />
         </el-form-item>
         <el-form-item label="结束时间" prop="endTime">
           <el-date-picker v-model="bookForm.endTime" type="datetime" placeholder="选择结束时间（可跨天）"
-                          value-format="YYYY-MM-DD HH:mm:ss" :disabled-date="disabledDate"
+                          format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm"
+                          :disabled-date="disabledDate"
                           style="width: 100%" />
         </el-form-item>
         <el-form-item label="会议用途" prop="purpose">
@@ -216,8 +218,8 @@ function openBook(room) {
 
 async function onSubmit() {
   await bookFormRef.value.validate()
-  // 两个时间都是 "YYYY-MM-DD HH:mm:ss" 格式的字符串，字典序与时间先后一致，
-  // 所以可以直接比较字符串，不必转成 Date 对象。
+  // 两个时间都是 "YYYY-MM-DD HH:mm" 格式的字符串（日期选择器按分钟取值，不带秒），
+  // 定宽格式下字典序与时间先后一致，所以可以直接比较字符串，不必转成 Date 对象。
   // 这里只拦住「结束不晚于开始」这一种，跨天场景是合法的（如 23:00 到次日 02:00）。
   if (bookForm.endTime <= bookForm.startTime) {
     ElMessage.warning('结束时间必须晚于开始时间')

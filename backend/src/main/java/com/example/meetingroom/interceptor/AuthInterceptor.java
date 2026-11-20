@@ -34,6 +34,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (HttpMethod.OPTIONS.matches(request.getMethod()) || !(handler instanceof HandlerMethod)) {
             return true;
         }
+        // 兜底：Tomcat 复用工作线程，任何异常路径留下的身份都不能带进本次请求
+        UserContext.clear();
 
         String header = request.getHeader("Authorization");
         String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : header;
@@ -42,6 +44,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (parsed == null) {
             throw new BusinessException(401, "登录已失效，请重新登录");
         }
+        // parsed 里的 username/role 只是签发时的快照，不能用于授权判断，只取 userId。
 
         // 令牌只证明签名有效、未过期，并不代表账号此刻仍可用。
         // 管理员停用或调整角色后，对方手上的旧令牌在没有这一层回查时仍能用满整个有效期，
@@ -53,12 +56,15 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (!UserRole.isEnabled(current.getStatus())) {
             throw new BusinessException(401, "账号已被停用，请联系管理员");
         }
-        UserContext.set(new LoginUser(current.getId(), current.getUsername(),
-                current.getRole(), current.getRealName()));
 
+        // 先做 403 判断、再写 ThreadLocal：preHandle 抛异常时 Spring MVC 不会回调本拦截器的
+        // afterCompletion（interceptorIndex 未推进），若先 set 后抛，身份会残留在复用的线程上。
+        // 约定：UserContext.set 之后到 return true 之间不得再抛异常。
         if (request.getRequestURI().startsWith("/api/admin/") && !UserRole.isAdmin(current.getRole())) {
             throw new BusinessException(403, "该操作仅管理员可执行");
         }
+        UserContext.set(new LoginUser(current.getId(), current.getUsername(),
+                current.getRole(), current.getRealName()));
         return true;
     }
 

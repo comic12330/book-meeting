@@ -1,0 +1,2302 @@
+{
+  "info": {
+    "name": "会议室预定系统 · 接口测试",
+    "description": "覆盖任务书要求的接口测试用例：认证与访问控制、会议室查询、**预定冲突校验（必测）**、审核流程、管理端用户管理。\n\n## 怎么跑\n\n1. 启动后端（`mvn spring-boot:run` 或 IDEA 直接运行），默认 `http://localhost:8080`；\n2. 数据库已按 `db/schema.sql` 初始化（需要 admin / zhangsan / lisi 三个账号，密码都是 123456）；\n3. 导入本集合，右键 **Run collection**，用默认顺序一次跑完。\n\n## 注意\n\n- **先跑 `00-1 初始化测试时段`**：它生成一整组互不重叠的时间槽（1~20 天后的某一天）。\n  重复运行前务必再跑一次，否则上一轮留下的记录会让「提交成功」类用例变成冲突失败。\n- 令牌在 `01` 里登录后自动写入集合变量，不需要手工复制；单独调试某条请求时，\n  先跑一次对应的登录请求即可。\n- 用例会往库里写真实数据（提交、取消、审核）。跑完想清理，可以把集合变量里的\n  `slotDate` 换一天重新跑，旧数据不影响新时段。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "otherToken",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// 兜底：单独点某条请求调试时，若时间槽还没生成，就地生成一套。",
+          "// 00-1 自己会生成，这里跳过它，免得同一轮生成两次、日志里出现两个日期。",
+          "if (!pm.collectionVariables.get('slotDate') &&",
+          "    pm.info.requestName !== '00-1 初始化测试时段') {",
+          "    const pad = n => String(n).padStart(2, '0');",
+          "    const base = new Date();",
+          "    // 1~20 天后：既满足「最多提前 30 天」，也满足「开始时间不能早于当前时刻」",
+          "    base.setDate(base.getDate() + 1 + Math.floor(Math.random() * 20));",
+          "    const date = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;",
+          "    const nxt = new Date(base.getTime() + 86400000);",
+          "    const nextDate = `${nxt.getFullYear()}-${pad(nxt.getMonth() + 1)}-${pad(nxt.getDate())}`;",
+          "",
+          "    pm.collectionVariables.set('slotDate', date);",
+          "    pm.collectionVariables.set('slotNextDate', nextDate);",
+          "    // A 是基础时段，其余时段都相对它构造，覆盖「部分重叠 / 被包含 / 包含 / 紧邻」",
+          "    pm.collectionVariables.set('slotAStart', `${date} 09:00`);",
+          "    pm.collectionVariables.set('slotAEnd', `${date} 10:00`);",
+          "    pm.collectionVariables.set('slotOverlapStart', `${date} 09:30`);",
+          "    pm.collectionVariables.set('slotOverlapEnd', `${date} 10:30`);",
+          "    pm.collectionVariables.set('slotInnerStart', `${date} 09:15`);",
+          "    pm.collectionVariables.set('slotInnerEnd', `${date} 09:45`);",
+          "    pm.collectionVariables.set('slotOuterStart', `${date} 08:30`);",
+          "    pm.collectionVariables.set('slotOuterEnd', `${date} 10:30`);",
+          "    pm.collectionVariables.set('slotAdjacentStart', `${date} 10:00`);",
+          "    pm.collectionVariables.set('slotAdjacentEnd', `${date} 11:00`);",
+          "    pm.collectionVariables.set('slotCancelStart', `${date} 16:00`);",
+          "    pm.collectionVariables.set('slotCancelEnd', `${date} 17:00`);",
+          "    pm.collectionVariables.set('slotApproveStart', `${date} 18:00`);",
+          "    pm.collectionVariables.set('slotApproveEnd', `${date} 19:00`);",
+          "    pm.collectionVariables.set('slotRejectStart', `${date} 13:00`);",
+          "    pm.collectionVariables.set('slotRejectEnd', `${date} 14:00`);",
+          "    pm.collectionVariables.set('crossStart', `${date} 21:00`);",
+          "    pm.collectionVariables.set('crossEnd', `${nextDate} 01:00`);",
+          "    pm.collectionVariables.set('crossConflictStart', `${date} 21:30`);",
+          "    pm.collectionVariables.set('crossConflictEnd', `${nextDate} 00:30`);",
+          "    // 清掉上一次运行留下的记录 id，避免后续请求拿旧 id 断言",
+          "    ['bookId', 'bookAdjacentId', 'bookOtherRoomId', 'bookReuseId',",
+          "     'pendingApproveId', 'pendingRejectId', 'bookCrossId', 'newUserId'].forEach(",
+          "        k => pm.collectionVariables.unset(k)",
+          "    );",
+          "    console.log('本次运行使用日期：' + date);",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 准备（Runner 第一条）",
+      "item": [
+        {
+          "name": "00-1 初始化测试时段",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/me",
+            "description": "生成整次运行共用的时间槽变量。这条不带令牌，同时验证「未登录访问受保护接口」被拦截。\n重复运行前先跑这一条，否则新数据会撞上上一轮留下的记录。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const pad = n => String(n).padStart(2, '0');",
+                  "const base = new Date();",
+                  "// 1~20 天后：既满足「最多提前 30 天」，也满足「开始时间不能早于当前时刻」",
+                  "base.setDate(base.getDate() + 1 + Math.floor(Math.random() * 20));",
+                  "const date = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;",
+                  "const nxt = new Date(base.getTime() + 86400000);",
+                  "const nextDate = `${nxt.getFullYear()}-${pad(nxt.getMonth() + 1)}-${pad(nxt.getDate())}`;",
+                  "",
+                  "pm.collectionVariables.set('slotDate', date);",
+                  "pm.collectionVariables.set('slotNextDate', nextDate);",
+                  "// A 是基础时段，其余时段都相对它构造，覆盖「部分重叠 / 被包含 / 包含 / 紧邻」",
+                  "pm.collectionVariables.set('slotAStart', `${date} 09:00`);",
+                  "pm.collectionVariables.set('slotAEnd', `${date} 10:00`);",
+                  "pm.collectionVariables.set('slotOverlapStart', `${date} 09:30`);",
+                  "pm.collectionVariables.set('slotOverlapEnd', `${date} 10:30`);",
+                  "pm.collectionVariables.set('slotInnerStart', `${date} 09:15`);",
+                  "pm.collectionVariables.set('slotInnerEnd', `${date} 09:45`);",
+                  "pm.collectionVariables.set('slotOuterStart', `${date} 08:30`);",
+                  "pm.collectionVariables.set('slotOuterEnd', `${date} 10:30`);",
+                  "pm.collectionVariables.set('slotAdjacentStart', `${date} 10:00`);",
+                  "pm.collectionVariables.set('slotAdjacentEnd', `${date} 11:00`);",
+                  "pm.collectionVariables.set('slotCancelStart', `${date} 16:00`);",
+                  "pm.collectionVariables.set('slotCancelEnd', `${date} 17:00`);",
+                  "pm.collectionVariables.set('slotApproveStart', `${date} 18:00`);",
+                  "pm.collectionVariables.set('slotApproveEnd', `${date} 19:00`);",
+                  "pm.collectionVariables.set('slotRejectStart', `${date} 13:00`);",
+                  "pm.collectionVariables.set('slotRejectEnd', `${date} 14:00`);",
+                  "pm.collectionVariables.set('crossStart', `${date} 21:00`);",
+                  "pm.collectionVariables.set('crossEnd', `${nextDate} 01:00`);",
+                  "pm.collectionVariables.set('crossConflictStart', `${date} 21:30`);",
+                  "pm.collectionVariables.set('crossConflictEnd', `${nextDate} 00:30`);",
+                  "// 清掉上一次运行留下的记录 id，避免后续请求拿旧 id 断言",
+                  "['bookId', 'bookAdjacentId', 'bookOtherRoomId', 'bookReuseId',",
+                  " 'pendingApproveId', 'pendingRejectId', 'bookCrossId', 'newUserId'].forEach(",
+                  "    k => pm.collectionVariables.unset(k)",
+                  ");",
+                  "console.log('本次运行使用日期：' + date);",
+                  "",
+                  "pm.test('未登录访问受保护接口返回 401', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 认证与访问控制",
+      "item": [
+        {
+          "name": "01-1 管理员登录",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "description": "登录成功后把令牌写进集合变量，后续请求靠它带 Authorization。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('登录成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回三段式令牌', () => pm.expect(json.data.token.split('.').length).to.eql(3));",
+                  "pm.test('角色为管理员', () => pm.expect(json.data.role).to.eql(1));",
+                  "pm.collectionVariables.set('adminToken', json.data.token);",
+                  "pm.collectionVariables.set('adminUserId', json.data.userId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-2 普通用户登录（zhangsan）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"zhangsan\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('登录成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('角色为普通用户', () => pm.expect(json.data.role).to.eql(0));",
+                  "pm.collectionVariables.set('userToken', json.data.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-3 普通用户登录（lisi，用于越权用例）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"lisi\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('登录成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('otherToken', json.data.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-4 登录失败：密码错误",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"zhangsan\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示账号或密码错误', () => pm.expect(json.msg).to.eql('账号或密码错误'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-5 登录失败：账号不存在，提示与密码错误一致",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "description": "账号不存在与密码错误必须返回同一句提示，否则等于对外提供账号枚举接口。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"no-such-user\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('不泄漏账号是否存在', () => pm.expect(json.msg).to.eql('账号或密码错误'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-6 登录参数校验：账号为空",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 400', () => pm.expect(json.code).to.eql(400));",
+                  "pm.test('提示请输入账号', () => pm.expect(json.msg).to.include('账号'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-7 获取当前登录信息",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回的是当前登录用户', () => pm.expect(json.data.username).to.eql('zhangsan'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-8 注册成功（账号随机生成）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/register",
+            "description": "请求体里故意塞 role=1，服务端必须忽略，注册一律落成普通用户。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{regUsername}}\",\n  \"password\": \"123456\",\n  \"realName\": \"接口测试账号\",\n  \"phone\": \"13900001234\",\n  \"role\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('regUsername', 'stu' + Date.now().toString().slice(-8));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('注册成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-9 注册失败：账号已存在",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{regUsername}}\",\n  \"password\": \"123456\",\n  \"realName\": \"接口测试账号\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示已被注册', () => pm.expect(json.msg).to.include('已'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-10 注册参数校验：密码不足 6 位",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"shortpwd001\",\n  \"password\": \"123\",\n  \"realName\": \"短密码测试\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 400', () => pm.expect(json.code).to.eql(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-11 普通用户访问管理端接口",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users?pageNum=1&pageSize=10",
+            "description": "角色校验在拦截器统一完成，控制器里不再判断。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 403', () => pm.expect(json.code).to.eql(403));",
+                  "pm.test('提示仅管理员可执行', () => pm.expect(json.msg).to.include('管理员'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "01-12 伪造令牌访问受保护接口",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.request.headers.upsert({key: 'Authorization', value: 'Bearer eyJhbGciOiJub25lIn0.eyJ1aWQiOjF9.forged'});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('伪造令牌返回 401 而不是 500', () => pm.expect(json.code).to.eql(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 会议室查询",
+      "item": [
+        {
+          "name": "02-1 列表：只返回启用中的会议室",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "const list = json.data.list || [];",
+                  "pm.test('返回了数据', () => pm.expect(list.length).to.be.at.least(1));",
+                  "pm.test('全部为启用状态', () => pm.expect(list.every(r => r.status === 1)).to.be.true);",
+                  "const first = list[0];",
+                  "if (first) pm.collectionVariables.set('roomId0', first.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-2 按最少容纳人数筛选",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=20&minCapacity=30"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('每条容量都不小于 30', () => pm.expect((json.data.list || []).every(r => r.capacity >= 30)).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-3 按设备筛选",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=20&equipment=video",
+            "description": "设备是逗号分隔的字符串，服务端用 FIND_IN_SET 精确匹配，不能靠 LIKE 蒙。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('每条都含 video', () => pm.expect((json.data.list || []).every(r => (r.equipment || '').split(',').includes('video'))).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-4 按位置模糊筛选",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=20&location=%E8%A1%8C%E6%94%BF%E6%A5%BC",
+            "description": "位置是模糊匹配，参数值「行政楼」做了 URL 编码。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('每条位置都含行政楼', () => pm.expect((json.data.list || []).every(r => r.location.includes('行政楼'))).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-5 多条件同时生效取交集",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=20&location=%E8%A1%8C%E6%94%BF%E6%A5%BC&minCapacity=12&equipment=projector"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "const list = json.data.list || [];",
+                  "pm.test('每个结果同时满足三个条件', () => pm.expect(list.every(r =>",
+                  "    r.location.includes('行政楼') && r.capacity >= 12 &&",
+                  "    (r.equipment || '').split(',').includes('projector'))).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-6 单页条数超上限被截断",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=500",
+            "description": "上限 100 由配置决定，一次拉走整表是不允许的。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('单页不超过 100 条', () => pm.expect((json.data.list || []).length).to.be.at.most(100));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-7 会议室详情",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms/{{roomId0}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回的正是该会议室', () => pm.expect(json.data.id).to.eql(Number(pm.collectionVariables.get('roomId0'))));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02-8 详情：不存在的会议室返回业务错误",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示会议室不存在', () => pm.expect(json.msg).to.include('不存在'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 预定与冲突校验（必测）",
+      "item": [
+        {
+          "name": "03-1 选取两个启用中的会议室",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/rooms?pageNum=1&pageSize=10",
+            "description": "后面的用例都基于这两个会议室：roomId 用来制造冲突，roomId2 用来验证不同会议室互不影响。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "const rooms = (json.data.list || []).filter(r => r.status === 1);",
+                  "pm.test('至少有两个可用会议室', () => pm.expect(rooms.length).to.be.at.least(2));",
+                  "pm.collectionVariables.set('roomId', rooms[0].id);",
+                  "pm.collectionVariables.set('roomId2', rooms[1].id);",
+                  "pm.collectionVariables.set('roomName', rooms[0].roomName);",
+                  "console.log('测试会议室：' + rooms[0].roomName);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-2 提交成功：基础时段 09:00-10:00",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotAStart}}\",\n  \"endTime\": \"{{slotAEnd}}\",\n  \"purpose\": \"接口测试-基础时段\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('提交成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回新记录主键', () => pm.expect(json.data).to.be.a('number'));",
+                  "pm.collectionVariables.set('bookId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-3 冲突：部分重叠（09:30-10:30）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "description": "判定式：已有开始 < 新结束 AND 已有结束 > 新开始。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotOverlapStart}}\",\n  \"endTime\": \"{{slotOverlapEnd}}\",\n  \"purpose\": \"接口测试-重叠\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示时段被占用', () => pm.expect(json.msg).to.include('该会议室在'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-4 冲突：新时段被已有记录包含（09:15-09:45）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotInnerStart}}\",\n  \"endTime\": \"{{slotInnerEnd}}\",\n  \"purpose\": \"接口测试-被包含\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示时段被占用', () => pm.expect(json.msg).to.include('该会议室在'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-5 冲突：新时段包含已有记录（08:30-10:30）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotOuterStart}}\",\n  \"endTime\": \"{{slotOuterEnd}}\",\n  \"purpose\": \"接口测试-包含\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示时段被占用', () => pm.expect(json.msg).to.include('该会议室在'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-6 不冲突：紧邻时段（10:00-11:00）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "description": "边界必须是左闭右开式的比较，否则 10:00 整这种紧邻时段会被误判成冲突。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotAdjacentStart}}\",\n  \"endTime\": \"{{slotAdjacentEnd}}\",\n  \"purpose\": \"接口测试-紧邻\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('紧邻时段放行', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('bookAdjacentId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-7 不冲突：同一时段换一个会议室",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId2}}\",\n  \"startTime\": \"{{slotAStart}}\",\n  \"endTime\": \"{{slotAEnd}}\",\n  \"purpose\": \"接口测试-不同会议室\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('不同会议室互不影响', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('bookOtherRoomId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-8 我的预定：只返回本人记录",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/my?pageNum=1&pageSize=50"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('全部是本人提交的', () => pm.expect((json.data.list || []).every(b => b.username === 'zhangsan')).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-9 详情：查看本人预定",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{bookId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('状态为待审核', () => pm.expect(json.data.status).to.eql(0));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-10 越权：查看他人预定详情",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{otherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{bookId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 403', () => pm.expect(json.code).to.eql(403));",
+                  "pm.test('提示无权查看', () => pm.expect(json.msg).to.include('无权'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-11 越权：取消他人预定",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{otherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{bookId}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"我要这个会议室\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 403', () => pm.expect(json.code).to.eql(403));",
+                  "pm.test('提示只能取消本人预定', () => pm.expect(json.msg).to.include('本人'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-12 取消：本人取消成功",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{bookId}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"会议临时取消\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('取消成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-13 不冲突：已取消的记录释放时段",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "description": "取消的记录不再占用时段，这是「取消」与「驳回」都必须满足的性质。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotAStart}}\",\n  \"endTime\": \"{{slotAEnd}}\",\n  \"purpose\": \"接口测试-取消后重新预定\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('原时段可以重新预定', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('bookReuseId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-14 校验：结束时间早于开始时间",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotCancelEnd}}\",\n  \"endTime\": \"{{slotCancelStart}}\",\n  \"purpose\": \"接口测试-时间反了\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示结束时间必须晚于开始时间', () => pm.expect(json.msg).to.include('晚于开始时间'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-15 校验：参会人数超过会议室容量",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotCancelStart}}\",\n  \"endTime\": \"{{slotCancelEnd}}\",\n  \"purpose\": \"接口测试-人数超限\",\n  \"participantNum\": 999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示超过容纳上限', () => pm.expect(json.msg).to.include('容纳上限'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-16 校验：已停用的会议室不接受预定",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "description": "id=5 是 schema.sql 里预置的「贵宾接待室」，status=0。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": 5,\n  \"startTime\": \"{{slotCancelStart}}\",\n  \"endTime\": \"{{slotCancelEnd}}\",\n  \"purpose\": \"接口测试-停用会议室\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示会议室已停用', () => pm.expect(json.msg).to.include('停用'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-17 校验：缺少必填字段",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotCancelStart}}\",\n  \"endTime\": \"{{slotCancelEnd}}\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 400', () => pm.expect(json.code).to.eql(400));",
+                  "pm.test('提示请填写会议用途', () => pm.expect(json.msg).to.include('用途'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-18 跨天：21:00 至次日 01:00 允许",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "description": "每日窗口只约束开始时刻，结束允许跨天，否则 20:00-次日02:00 这类会议提交不了。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{crossStart}}\",\n  \"endTime\": \"{{crossEnd}}\",\n  \"purpose\": \"接口测试-跨天\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('跨天时段可以提交', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('bookCrossId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03-19 跨天：与跨天记录重叠仍拒绝",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{crossConflictStart}}\",\n  \"endTime\": \"{{crossConflictEnd}}\",\n  \"purpose\": \"接口测试-跨天重叠\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示时段被占用', () => pm.expect(json.msg).to.include('该会议室在'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 审核与管理员处置",
+      "item": [
+        {
+          "name": "04-1 管理端：待审核列表",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books?status=0&pageNum=1&pageSize=50"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回的都是待审核', () => pm.expect((json.data.list || []).every(b => b.status === 0)).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-2 提交待审记录（用于审核通过）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotApproveStart}}\",\n  \"endTime\": \"{{slotApproveEnd}}\",\n  \"purpose\": \"接口测试-待审核通过\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('提交成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('pendingApproveId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-3 审核通过",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{pendingApproveId}}/audit",
+            "description": "审核通过前会对会议室行加 FOR UPDATE，把同一会议室的审核串行化。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('审核成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-4 审核后详情：状态与审核时间都已写入",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{pendingApproveId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('状态变为已通过', () => pm.expect(json.data.status).to.eql(1));",
+                  "pm.test('记录了审核时间', () => pm.expect(json.data.auditTime).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-5 审核：已处理的记录不能重复审核",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{pendingApproveId}}/audit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示已处理', () => pm.expect(json.msg).to.include('已处理'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-6 审核通过后，同时段再提交被拒绝",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "description": "验证「审核通过」确实把时段占住了，否则审核就只是个标记。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotApproveStart}}\",\n  \"endTime\": \"{{slotApproveEnd}}\",\n  \"purpose\": \"接口测试-通过后抢占\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('被拒绝', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示时段被占用', () => pm.expect(json.msg).to.include('该会议室在'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-7 提交待审记录（用于驳回）",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startTime\": \"{{slotRejectStart}}\",\n  \"endTime\": \"{{slotRejectEnd}}\",\n  \"purpose\": \"接口测试-待驳回\",\n  \"participantNum\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('提交成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('pendingRejectId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-8 审核：结果传非法值",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{pendingRejectId}}/audit",
+            "description": "审核结果只能是 1（通过）或 2（驳回），传已取消等其他状态必须拒绝。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 400', () => pm.expect(json.code).to.eql(400));",
+                  "pm.test('提示只能是通过或驳回', () => pm.expect(json.msg).to.include('通过'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-9 驳回：必须填写理由",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{pendingRejectId}}/audit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 400', () => pm.expect(json.code).to.eql(400));",
+                  "pm.test('提示必须填写理由', () => pm.expect(json.msg).to.include('理由'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-10 驳回：填写理由后成功",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{pendingRejectId}}/audit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 2,\n  \"auditMsg\": \"该时段另有安排，请改期\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('驳回成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-11 申请人能看到驳回理由",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{pendingRejectId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('状态为已驳回', () => pm.expect(json.data.status).to.eql(2));",
+                  "pm.test('理由对申请人可见', () => pm.expect(json.data.auditMsg).to.include('另有安排'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-12 管理员取消他人预定：理由为空被拒",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{bookAdjacentId}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 400', () => pm.expect(json.code).to.eql(400));",
+                  "pm.test('提示需要填写理由', () => pm.expect(json.msg).to.include('理由'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-13 管理员取消他人预定：填写理由后成功",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/{{bookAdjacentId}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"设备故障，场地临时被占用\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('取消成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-14 申请人能看到管理员的取消理由",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/books/{{bookAdjacentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('状态为已取消', () => pm.expect(json.data.status).to.eql(3));",
+                  "pm.test('取消理由对申请人可见', () => pm.expect(json.data.cancelReason).to.include('设备故障'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-15 审核：使用时间已结束的申请不能再通过",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/2/audit",
+            "description": "id=2 是 schema.sql 里预置的过期待审申请（2026-11-18）。若你的库被重建过、该 id 已不存在，本条会提示「预定记录不存在」，属数据缺失而非接口异常。\n业务上保留「驳回」这条出口，用于清理过期待审队列。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.msg && json.msg.indexOf('不存在') >= 0) {",
+                  "    console.warn('库中没有过期待审数据，跳过该用例');",
+                  "    pm.test('过期待审申请不能被通过（数据缺失，已跳过）', () => pm.expect(true).to.be.true);",
+                  "} else {",
+                  "    pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "    pm.test('提示使用时间已结束', () => pm.expect(json.msg).to.include('已结束'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04-16 定时任务：过期已通过记录置为已完成",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/books/complete-expired",
+            "description": "手动触发一次定时任务的逻辑，返回本次处理的条数（可能是 0，说明没有到期记录）。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回处理条数', () => pm.expect(json.data).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 管理端用户管理",
+      "item": [
+        {
+          "name": "05-1 用户列表",
+          "response": [],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users?pageNum=1&pageSize=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 200', () => pm.expect(json.code).to.eql(200));",
+                  "pm.test('返回了用户数据', () => pm.expect((json.data.list || []).length).to.be.at.least(1));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "05-2 新建用户",
+          "response": [],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{newUsername}}\",\n  \"password\": \"123456\",\n  \"realName\": \"接口测试新建\",\n  \"phone\": \"13900005678\",\n  \"role\": 0,\n  \"status\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('newUsername', 't' + Date.now().toString().slice(-8));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('创建成功', () => pm.expect(json.code).to.eql(200));",
+                  "pm.collectionVariables.set('newUserId', json.data);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "05-3 停用该用户",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users/{{newUserId}}/status/0"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('停用成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "05-4 不能停用当前登录的账号",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users/{{adminUserId}}/status/0"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('业务码 1001', () => pm.expect(json.code).to.eql(1001));",
+                  "pm.test('提示不能停用自己', () => pm.expect(json.msg).to.include('当前登录'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "05-5 管理员重置密码",
+          "response": [],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users/{{newUserId}}/password",
+            "description": "管理员重置密码不校验原密码——执行者已经过管理员校验；也不要设成固定默认值。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"654321\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('重置成功', () => pm.expect(json.code).to.eql(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -8,26 +8,30 @@
 会议预定系统/
 ├── backend/                        # 后端 Maven 工程（IDEA 直接打开此目录）
 │   ├── pom.xml
-│   └── src/main/
-│       ├── java/com/example/meetingroom/
-│       │   ├── MeetingRoomApplication.java
-│       │   ├── common/            # 统一返回体、分页、业务异常、全局异常、登录上下文
-│       │   │                      # 状态码字典（BookStatus/RoomStatus/UserRole）、参数键定义（SysConfigKey）
-│       │   ├── annotation/        # @LogOperation 注解（标记需要记日志的管理动作）
-│       │   ├── aspect/            # 操作日志切面（事务提交后落库）
-│       │   ├── config/            # 跨域与拦截器注册、Jackson 时间格式
-│       │   ├── interceptor/       # 登录拦截 + 管理端角色校验
-│       │   ├── controller/        # 用户端接口
-│       │   ├── controller/admin/  # 管理端接口
-│       │   ├── service/           # 业务层（冲突校验在 BookService，参数读取在 SysConfigService）
-│       │   ├── task/              # 定时任务（已结束预定自动置为「已完成」）
-│       │   ├── mapper/            # MyBatis Mapper 接口
-│       │   ├── entity/dto/vo/     # 实体、入参、出参
-│       │   └── util/              # 令牌、密码摘要
-│       └── resources/
-│           ├── application.yml    # 部署级参数：数据源、令牌密钥、分页上下限
-│           ├── mapper/*.xml       # 手写 SQL
-│           └── db/                # schema.sql 全新初始化；upgrade-2026-11-19.sql 存量库增量
+│   ├── src/main/
+│   │   ├── java/com/example/meetingroom/
+│   │   │   ├── MeetingRoomApplication.java
+│   │   │   ├── common/            # 统一返回体、分页、业务异常、全局异常、登录上下文
+│   │   │   │                      # 状态码字典（BookStatus/RoomStatus/UserRole）、参数键定义（SysConfigKey）
+│   │   │   ├── annotation/        # @LogOperation 注解（标记需要记日志的管理动作）
+│   │   │   ├── aspect/            # 操作日志切面（事务提交后落库）
+│   │   │   ├── config/            # 跨域与拦截器注册、Jackson 时间格式
+│   │   │   ├── interceptor/       # 登录拦截 + 管理端角色校验
+│   │   │   ├── controller/        # 用户端接口
+│   │   │   ├── controller/admin/  # 管理端接口
+│   │   │   ├── service/           # 业务层（冲突校验在 BookService，参数读取在 SysConfigService）
+│   │   │   ├── task/              # 定时任务（已结束预定自动置为「已完成」）
+│   │   │   ├── mapper/            # MyBatis Mapper 接口
+│   │   │   ├── entity/dto/vo/     # 实体、入参、出参
+│   │   │   └── util/              # 令牌、密码摘要
+│   │   └── resources/
+│   │       ├── application.yml    # 部署级参数：数据源、令牌密钥、分页上下限
+│   │       ├── mapper/*.xml       # 手写 SQL
+│   │       └── db/                # schema.sql 全新初始化；upgrade-2026-11-19.sql 存量库增量
+│   └── src/test/                   # 单元测试，见第十一节
+│       └── java/.../unit/         # 不启动容器、不连数据库，Mockito 替换 Mapper
+├── postman/                        # 接口测试集合，Postman 导入或 newman 命令行运行
+│   └── 会议室预定系统.postman_collection.json
 └── frontend/                       # 前端 Vite 工程（VS Code 直接打开此目录）
     ├── package.json
     ├── vite.config.js              # /api 代理到 8080
@@ -345,7 +349,89 @@ WHERE status = 1 AND end_time < NOW()
 | 操作日志：普通用户访问 `/api/admin/logs` | 403 |
 | 操作日志：普通用户取消他人预定 | 403「只能取消本人的预定」（原先管理员除外，现已收口） |
 
-## 十一、可直接作为拓展项继续做的功能
+## 十一、自动化测试与接口测试
+
+任务书要求「接口测试用例与单元测试用例须随源码提交」。本项目按工具分工，两类用例都在仓库里、都能执行：
+
+| 类型 | 工具 | 位置 | 规模 |
+|---|---|---|---|
+| 单元测试 | JUnit 5 + Mockito | `backend/src/test/java/com/example/meetingroom/unit/` | 5 个类 / 51 个用例 |
+| 接口测试 | Postman 集合 | `postman/会议室预定系统.postman_collection.json` | 6 个分组 / 61 个请求 / 107 条断言 |
+
+分工是清楚的：单元测试管「规则本身写对了没有」，接口测试管「规则确实挂在请求路径上，并且在真实 Tomcat 与真实 MySQL 上生效」。
+
+### 11.1 单元测试
+
+不启动 Spring 容器，也不连数据库，`mvn test` 在任何机器上都能跑完：
+
+```bash
+cd backend
+mvn test                                  # 51 个用例，约 3 秒
+mvn test -Dtest=BookServiceTest           # 只跑某个类
+mvn clean package -DskipTests             # 打包时跳过测试
+```
+
+| 测试类 | 用例数 | 守什么 |
+|---|---|---|
+| `TokenUtilTest` | 10 | 令牌签发解析、载荷格式（sub 为字符串、exp 秒级）、篡改载荷 / 签名、`alg=none` 算法混淆、过期、旧两段式令牌、中文用户名不乱码 |
+| `BookServiceTest` | 25 | 提交的六道校验（会议室状态、时间区间、提前天数、每日窗口、时长上限、人数上限）、审核两道、取消三道、冲突状态集合、扫描过期的参数传递 |
+| `BookStatusTest` | 6 | 两个「参与冲突判定的状态集合」：提交 `[0,1]`、审核 `[1]`，以及集合不可被外部修改 |
+| `SysConfigKeyTest` | 5 | 参数键唯一、默认值落在自己声明的范围内、时间型默认值可解析、默认窗口起止有序 |
+| `PageQueryTest` | 5 | 非法页码回落、单页条数按上限截断 |
+
+### 11.2 接口测试（Postman）
+
+**怎么跑**
+
+1. 启动后端（`mvn spring-boot:run`，或 IDEA 运行 `MeetingRoomApplication`），确认 `http://localhost:8080` 可访问；
+2. 数据库已按 `db/schema.sql` 初始化（需要 admin / zhangsan / lisi 三个账号，密码都是 123456）；
+3. Postman → Import → 选择 `postman/会议室预定系统.postman_collection.json`；
+4. 右键集合 → **Run collection** → Run，按默认顺序跑即可。
+
+命令行跑（答辩现场或以后接 CI 都能用）：
+
+```bash
+npx newman run "postman/会议室预定系统.postman_collection.json" -r cli
+
+# 想导出 HTML 报告时（先执行 npm i -g newman-reporter-html）
+npx newman run "postman/会议室预定系统.postman_collection.json" \
+    -r html --reporter-html-export report.html
+```
+
+**分组与覆盖**
+
+| 分组 | 请求数 | 覆盖 |
+|---|---|---|
+| 00 准备 | 1 | 生成整次运行共用的时间槽；同时验证未登录访问受保护接口返回 401 |
+| 01 认证与访问控制 | 12 | 登录成功 / 密码错 / 账号不存在（返回同一文案，不泄漏账号是否存在）、参数校验、注册（请求体带 role=1 不能提权）、匿名 401、伪造令牌 401、普通用户访问管理端 403 |
+| 02 会议室查询 | 8 | 只返回启用中、按人数 / 设备 / 位置筛选、多条件取交集、单页超上限截断、详情、不存在 |
+| 03 预定与冲突校验 | 19 | **冲突五种组合**（部分重叠、被包含、包含、紧邻放行、不同会议室放行）、待审记录占位、取消后释放时段、结束≤开始、超容量、停用会议室、缺必填、跨天放行与跨天冲突、越权查看与取消 |
+| 04 审核与管理员处置 | 16 | 审核通过、重复审核拒绝、驳回理由必填且落库、审核结果非法值、**通过后同时段再提交被拒（证明确实占住时段）**、管理员取消他人预定理由必填、过期待审不能通过、定时任务扫描幂等 |
+| 05 管理端用户管理 | 5 | 用户列表、新建、停用、不能停用当前登录账号、重置密码 |
+
+**三个设计要点**
+
+1. **时间槽在运行时生成，不写死日期**。`00-1` 算出一整天互不重叠的时段（1~20 天后的某一天）写进集合变量，后续用例全部引用。写死日期第二天就全过期，而且第二次运行必然撞上上一轮留下的记录。
+2. **令牌自动传递**。登录请求的 Tests 里把 token 写进集合变量，后续请求用 `{{userToken}}` / `{{adminToken}}` 引用，不需要手工复制粘贴；单独调试某条请求时，先跑一次对应角色的登录即可。
+3. **断言写在请求的 Tests 里**。每条请求都有 `pm.test(...)`，跑完在「Tests」标签页直接看到逐条通过情况，Runner 汇总页可以截图作为报告素材。
+
+**实测结果**（2026-11-20，本机 MySQL 8.0 + JDK 11 + 后端 8080）：
+
+| 指标 | 结果 |
+|---|---|
+| 请求 | 61 / 61 执行，0 失败 |
+| 断言 | 107 / 107 通过 |
+| 耗时 | 6.6 秒 |
+| 连续运行 | 第二次换新时段后同样全绿，不会撞上一轮的数据 |
+
+### 11.3 与报告「系统测试」章节的对应
+
+建议的写法：以 11.2 的分组表作为用例骨架，「执行结果」一列放 Runner 汇总截图与关键请求的 Tests 截图，冲突五种组合每种单独截一张；第十节的联调表作为补充说明。
+
+只贴手工联调记录会显得测试不可重复执行，只贴截图又没有用例编号，两者对着写最稳。
+
+
+## 十二、可直接作为拓展项继续做的功能
 
 任务书列出的 9 项拓展里，**定时任务**（第八节）与**操作日志**（第九节）已实现，其余条目中以下 4 项与本项目结构契合度最高，按任务书标注的星级从低到高排列：
 
@@ -366,7 +452,7 @@ WHERE status = 1 AND end_time < NOW()
 
 另有一项不属于任务书拓展、但属可续的优化方向：**日志保留期清理**。日志只增不减，长期运行会持续膨胀，可加 `log.keep-days` 参数（默认 90 天）放进 `sys_config` 由管理员调整，再用定时任务定期删除过期记录。没有立即做，是因为答辩周期内数据量级不足以暴露问题，且清理任务本身有误删风险。
 
-## 十二、注意事项
+## 十三、注意事项
 
 - **改了后端代码要重启**：`BookService` / Mapper 的修改不会热生效（工程未装 devtools），IDEA 里停止后重新运行 `MeetingRoomApplication`。
 - 密码摘要用 MD5：任务书允许「BCrypt 或 MD5」，选 MD5 是为了建库脚本能离线一次执行。若要升级 BCrypt，只改 `Md5Util` 的 `encode`/`verify` 实现，调用方无需改动（数据库 `password` 字段已是 VARCHAR(64)，足够存 BCrypt 的 60 位）。

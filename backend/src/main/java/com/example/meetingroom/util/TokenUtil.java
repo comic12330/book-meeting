@@ -17,14 +17,12 @@ import java.util.Base64;
 
 /**
  * JWT 工具：签发与校验标准三段式令牌（RFC 7519），签名算法固定 HS256（RFC 7518）。
- * <p>
- * 结构：Base64Url(header) + "." + Base64Url(payload) + "." + Base64Url(HMAC-SHA256(前两段))
- * <p>
- * <b>信任边界</b>：签名只保证令牌没有被篡改，不保证载荷里的 username/role 此刻仍然成立。
- * 载荷中的 username/role 只是给前端和调试看的冗余信息；服务端授权的唯一依据是
+ *
+ * 结构：Base64Url(header) + "." + Base64Url(payload) + "." + Base64Url(HMAC-SHA256(前两段))。
+ * 签名只保证令牌没有被篡改，不保证载荷里的 username/role 此刻仍然成立。
+ * 载荷中的 username/role 只是给前端和调试看的冗余信息，服务端授权的唯一依据是
  * sub（用户 ID）加上拦截器回查数据库得到的最新 status/role，见 AuthInterceptor。
- * <p>
- * 令牌不加密：payload 任何人都能 Base64Url 解码，因此不得放入密码等敏感信息。
+ * 令牌不加密，payload 任何人都能 Base64Url 解码，因此不得放入密码等敏感信息。
  */
 @Component
 public class TokenUtil {

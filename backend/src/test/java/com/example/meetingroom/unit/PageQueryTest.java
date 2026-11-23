@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * 分页参数防护的单元测试。
- * <p>
+ *
  * {@link PageQuery} 的上下限来自配置文件，这里显式写回静态字段，避免依赖容器是否启动过。
  * 守的是两个防护点：非法页码不能把 PageHelper 弄崩，超大 pageSize 不能把整表拉出来。
  */

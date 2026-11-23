@@ -30,7 +30,7 @@
 │   │       └── db/                # schema.sql 全新初始化；upgrade-2026-11-19.sql 存量库增量
 │   └── src/test/                   # 单元测试，见第十一节
 │       └── java/.../unit/         # 不启动容器、不连数据库，Mockito 替换 Mapper
-├── postman/                        # 接口测试集合，Postman 导入或 newman 命令行运行
+├── postman/                        # 接口测试集合（交付材料，不入仓库），Postman 导入或 newman 运行
 │   └── 会议室预定系统.postman_collection.json
 └── frontend/                       # 前端 Vite 工程（VS Code 直接打开此目录）
     ├── package.json
@@ -381,6 +381,8 @@ mvn clean package -DskipTests             # 打包时跳过测试
 
 ### 11.2 接口测试（Postman）
 
+> 集合与实验报告同属**交付材料**，交作业时随源码包一并提交，不放进 Git 仓库（`.gitignore` 已排除 `/postman`）。若从仓库克隆后没有该目录，先从交付包取回 `postman/会议室预定系统.postman_collection.json` 再往下走。
+
 **怎么跑**
 
 1. 启动后端（`mvn spring-boot:run`，或 IDEA 运行 `MeetingRoomApplication`），确认 `http://localhost:8080` 可访问；
@@ -415,14 +417,20 @@ npx newman run "postman/会议室预定系统.postman_collection.json" \
 2. **令牌自动传递**。登录请求的 Tests 里把 token 写进集合变量，后续请求用 `{{userToken}}` / `{{adminToken}}` 引用，不需要手工复制粘贴；单独调试某条请求时，先跑一次对应角色的登录即可。
 3. **断言写在请求的 Tests 里**。每条请求都有 `pm.test(...)`，跑完在「Tests」标签页直接看到逐条通过情况，Runner 汇总页可以截图作为报告素材。
 
-**实测结果**（2026-11-20，本机 MySQL 8.0 + JDK 11 + 后端 8080）：
+**实测结果**（2026-11-23，本机 MySQL 8.0 + JDK 11 + 后端 8080）：
 
 | 指标 | 结果 |
 |---|---|
 | 请求 | 61 / 61 执行，0 失败 |
 | 断言 | 107 / 107 通过 |
-| 耗时 | 6.6 秒 |
+| 耗时 | 5.6 秒，平均响应 8 ms（最小 2 ms，最大 24 ms） |
 | 连续运行 | 第二次换新时段后同样全绿，不会撞上一轮的数据 |
+
+**一处需要知道的环境依赖**：`04-15` 要求库里有一条「已结束但仍待审」的记录（现取 `meeting_book.id = 2`），而这条记录同时满足定时任务的归档条件（状态为已通过且已结束），可能先被置为「已完成」。两种情况后端都会拒绝审核，只是提示语从「已结束」变成「已处理」，因此该用例断言的是「审核被拒绝且提示明确」，不锁死具体文案。跑之前可执行：
+
+```sql
+UPDATE meeting_book SET status = 1, audit_msg = NULL, audit_time = NULL WHERE id = 2;
+```
 
 ### 11.3 与报告「系统测试」章节的对应
 

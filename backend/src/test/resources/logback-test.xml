@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  单元测试专用日志配置。
+  项目未配置 logback 时，logback 会退回默认的 DEBUG 级别，
+  ReflectionTestUtils 等工具类会把每个字段的设值都打一行，
+  测试结果被大量无关日志冲散。测试只关心失败与摘要，故压到 WARN。
+-->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

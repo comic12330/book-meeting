@@ -15,8 +15,7 @@ import javax.annotation.Resource;
 /**
  * 用户端会议室查询。
  *
- * 列表只返回启用中的会议室（status = 1），停用的不会出现在预定候选里；
- * 详情不限制状态，便于已预定过的用户回看会议室信息。
+ * 列表只返回启用中的会议室（status = 1），停用的不会出现在预定候选里；详情不限制状态，便于已预定过的用户回看会议室信息。
  */
 @RestController
 @RequestMapping("/api/rooms")

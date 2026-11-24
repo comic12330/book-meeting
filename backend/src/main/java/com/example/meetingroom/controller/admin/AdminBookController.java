@@ -22,8 +22,7 @@ import javax.validation.Valid;
 /**
  * 管理端预定审核：分页查看全部申请、执行通过或驳回、取消他人的预定。
  *
- * 管理员身份由 AuthInterceptor 按路径前缀 /api/admin/ 统一校验，
- * 所以本类方法体内不再重复判断角色。
+ * 管理员身份由 AuthInterceptor 按路径前缀 /api/admin/ 统一校验，所以本类方法体内不再重复判断角色。
  * 审核通过会触发本系统最重要的一次冲突校验，实现细节见 BookService.approve。
  */
 @RestController
@@ -44,8 +43,7 @@ public class AdminBookController {
 
     /**
      * 审核单条申请：通过（status=1）或驳回（status=2，必须填写理由）。
-     * 这里只做分派，校验仍在 Service 里：合法取值只有 1 和 2，传其它值会落到 approve，
-     * 由它抛出「审核结果只能是通过或驳回」，与拆分前行为一致。
+     * 这里只做分派，校验仍在 Service 里：合法取值只有 1 和 2，传其它值会落到 approve，由它抛出「审核结果只能是通过或驳回」，与拆分前行为一致。
      * 拆成两个入口是为了让操作日志能区分谁批的与谁驳的。
      */
     @PutMapping("/{id}/audit")
@@ -71,9 +69,7 @@ public class AdminBookController {
 
     /**
      * 手动触发一次「已结束预定转已完成」的扫描。
-     * 定时任务每 5 分钟自动跑一次，本接口不是业务功能，存在的唯一原因是方便验证与演示：
-     * 不必干等调度窗口，也不用临时改 cron 表达式重打包。返回本次更新的记录条数，
-     * 连点两次第二次必然返回 0，可用来验证幂等。
+     * 定时任务每 5 分钟自动跑一次，本接口不是业务功能，存在的唯一原因是方便验证与演示：不必干等调度窗口，也不用临时改 cron 表达式重打包。返回本次更新的记录条数，连点两次第二次必然返回 0，可用来验证幂等。
      */
     @PostMapping("/complete-expired")
     public Result<Integer> completeExpired() {

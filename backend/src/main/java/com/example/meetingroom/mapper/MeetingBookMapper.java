@@ -11,8 +11,7 @@ public interface MeetingBookMapper {
 
     /**
      * 冲突计数：同一会议室下存在指定状态的记录，且「已有开始 &lt; 新结束 且 已有结束 &gt; 新开始」。
-     * statuses 由调用方决定参与判定的状态集合：
-     * 提交环节传 [0,1]（待审核 + 已通过），审核环节只传 [1]（已通过）。
+     * statuses 由调用方决定参与判定的状态集合：提交环节传 [0,1]（待审核 + 已通过），审核环节只传 [1]（已通过）。
      * 审核时不把待审核算作占用，否则两条重叠的待审记录会互相阻断、永远无法通过。
      *
      * @param excludeId 审核场景下排除记录自身，提交场景传 null
@@ -44,9 +43,7 @@ public interface MeetingBookMapper {
 
     /**
      * 取消预定：只写状态、取消理由与取消时间，不动 audit_msg / audit_time。
-     * 与 updateStatus 分开是必需的：取消若复用审核语句，会把已有的审核痕迹清空，
-     * 「审核通过 → 取消」的记录就再也看不出何时被审批过。同样的理由让 completeExpired
-     * 也没有复用 updateStatus。
+     * 与 updateStatus 分开是必需的：取消若复用审核语句，会把已有的审核痕迹清空，「审核通过 → 取消」的记录就再也看不出何时被审批过。同样的理由让 completeExpired也没有复用 updateStatus。
      *
      * @param cancelReason 管理员取消他人预定时必填，本人取消传 null
      * @param cancelTime   取消时间，由服务层取当前时间
@@ -58,8 +55,7 @@ public interface MeetingBookMapper {
 
     /**
      * 定时任务专用：把使用时间已结束的预定批量置为已完成。
-     * 只更新 status 一列，不动 audit_msg / audit_time（与 updateStatus 的区别
-     * 详见 MeetingBookMapper.xml 中的说明）。时间比较交给数据库的 NOW() 完成。
+     * 只更新 status 一列，不动 audit_msg / audit_time（与 updateStatus 的区别详见 MeetingBookMapper.xml 中的说明）。时间比较交给数据库的 NOW() 完成。
      *
      * @param fromStatus 源状态，业务上固定传「已通过」
      * @param toStatus   目标状态，业务上固定传「已完成」

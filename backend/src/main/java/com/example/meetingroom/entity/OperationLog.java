@@ -5,8 +5,7 @@ import java.time.LocalDateTime;
 /**
  * 操作日志。
  *
- * 三个必留要素：操作人（operatorId + operatorName 快照）、操作类型（module + opType）、
- * 操作时间（opTime）。另外记录结果与失败原因，因为被拒绝的越权尝试比成功流水更有追查价值。
+ * 三个必留要素：操作人（operatorId + operatorName 快照）、操作类型（module + opType）、操作时间（opTime）。另外记录结果与失败原因，因为被拒绝的越权尝试比成功流水更有追查价值。
  * 本对象只在写入与查询时使用，没有任何更新入口，审计日志可以被改就等于没有。
  */
 public class OperationLog {

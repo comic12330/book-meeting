@@ -28,10 +28,8 @@ import java.util.List;
 /**
  * 用户与登录认证。
  *
- * 分两块职责：认证与自助（登录、注册、查看与修改个人资料、修改密码），
- * 以及管理端的用户管理（新建账号、编辑、启用停用、重置密码）。
- * 两条贯穿全类的规则：密码一律 MD5 加密后入库，任何返回给前端的对象都要把 password 置空；
- * 不允许删除用户，只能停用，因为预定表通过外键引用用户，删人会让历史预定失去归属。
+ * 分两块职责：认证与自助（登录、注册、查看与修改个人资料、修改密码），以及管理端的用户管理（新建账号、编辑、启用停用、重置密码）。
+ * 两条贯穿全类的规则：密码一律 MD5 加密后入库，任何返回给前端的对象都要把 password 置空；不允许删除用户，只能停用，因为预定表通过外键引用用户，删人会让历史预定失去归属。
  */
 @Service
 public class UserService {
@@ -101,8 +99,7 @@ public class UserService {
 
     /**
      * 修改本人资料，只允许改真实姓名与手机号。
-     * 这里用新建对象只带可改字段的做法，而不是把整个表单覆盖上去：
-     * 表单里即使出现 role、status、username 也会被忽略，防止借资料修改接口提权。
+     * 这里用新建对象只带可改字段的做法，而不是把整个表单覆盖上去：表单里即使出现 role、status、username 也会被忽略，防止借资料修改接口提权。
      */
     @Transactional(rollbackFor = Exception.class)
     public void updateProfile(Long userId, User form) {
@@ -122,8 +119,7 @@ public class UserService {
 
     /**
      * 修改本人密码，必须先校验原密码。
-     * 本项目改密后不会让旧令牌失效（需给 user 表加 token_version 字段才能做到），
-     * 旧令牌仍可用满有效期，这一点在报告里作为改进方向说明。
+     * 本项目改密后不会让旧令牌失效（需给 user 表加 token_version 字段才能做到），旧令牌仍可用满有效期，这一点在报告里作为改进方向说明。
      */
     @Transactional(rollbackFor = Exception.class)
     public void changePassword(Long userId, PasswordDTO dto) {
@@ -154,8 +150,7 @@ public class UserService {
 
     /**
      * 管理员新建账号。
-     * 与自助注册的区别：管理员可以直接指定角色和状态，初始密码由管理员设定
-     * （不设固定默认值，避免全站新账号共用一个弱口令）。
+     * 与自助注册的区别：管理员可以直接指定角色和状态，初始密码由管理员设定（不设固定默认值，避免全站新账号共用一个弱口令）。
      *
      * @return 新账号的主键
      */
@@ -182,9 +177,7 @@ public class UserService {
 
     /**
      * 管理员编辑账号：可改姓名、手机号、角色与状态，账号与密码不在此处修改。
-     * 两条限制都指向同一个风险，即把管理端入口关死：
-     * 不能停用当前登录的账号，否则提交成功的那一刻自己就掉线了；
-     * 不能把最后一个启用的管理员降级为普通用户，否则没有人能再进管理端。
+     * 两条限制都指向同一个风险，即把管理端入口关死：不能停用当前登录的账号，否则提交成功的那一刻自己就掉线了；不能把最后一个启用的管理员降级为普通用户，否则没有人能再进管理端。
      */
     @Transactional(rollbackFor = Exception.class)
     @LogOperation(type = OperationType.USER_UPDATE, target = "#dto.realName")
@@ -194,8 +187,7 @@ public class UserService {
         if (id.equals(UserContext.userId()) && !UserRole.isEnabled(dto.getStatus())) {
             throw new BusinessException(1001, "不能停用当前登录的账号");
         }
-        // 降级是可以让系统失去管理入口的唯一路径：停用自己已被上一句拦住，
-        // 而唯一的管理员只能是自己，所以「最后一名管理员」的判定实际只在降级时生效。
+        // 降级是可以让系统失去管理入口的唯一路径：停用自己已被上一句拦住，而唯一的管理员只能是自己，所以「最后一名管理员」的判定实际只在降级时生效。
         boolean demote = UserRole.isAdmin(exist.getRole()) && !UserRole.isAdmin(dto.getRole());
         if (demote) {
             ensureNotLastAdmin(id, "该账号是当前唯一启用的管理员，不能改为普通用户");
@@ -211,8 +203,7 @@ public class UserService {
     }
 
     /**
-     * 启用或停用账号。停用后该账号的旧令牌会立刻失效，
-     * 因为拦截器每次请求都回查数据库状态，见 AuthInterceptor。
+     * 启用或停用账号。停用后该账号的旧令牌会立刻失效，因为拦截器每次请求都回查数据库状态，见 AuthInterceptor。
      *
      * @param status 0 停用，1 启用，其它值一律拒绝
      */
@@ -232,8 +223,7 @@ public class UserService {
 
     /**
      * 管理员重置他人口令：不校验原密码，执行者身份已由 /api/admin/** 的拦截器校验。
-     * 操作日志只记「重置了谁的密码」，新密码与 MD5 摘要都不会进入日志，
-     * 日志是给事后追查用的，不能反过来变成泄露口令的入口。
+     * 操作日志只记「重置了谁的密码」，新密码与 MD5 摘要都不会进入日志，日志是给事后追查用的，不能反过来变成泄露口令的入口。
      */
     @Transactional(rollbackFor = Exception.class)
     @LogOperation(type = OperationType.USER_PASSWORD_RESET, target = "describe(#id)")
@@ -244,8 +234,7 @@ public class UserService {
 
     /**
      * 供操作日志取对象的可读描述，形如「张三（zhangsan）」。
-     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#id)")}），
-     * 启用停用、重置密码这些方法只拿到主键，光记 id 事后看不出动的是谁。
+     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#id)")}），启用停用、重置密码这些方法只拿到主键，光记 id 事后看不出动的是谁。
      * 查不到时返回 null，切面会忽略，不影响业务。
      */
     public String describe(Long id) {

@@ -20,8 +20,7 @@ import java.util.Base64;
  *
  * 结构：Base64Url(header) + "." + Base64Url(payload) + "." + Base64Url(HMAC-SHA256(前两段))。
  * 签名只保证令牌没有被篡改，不保证载荷里的 username/role 此刻仍然成立。
- * 载荷中的 username/role 只是给前端和调试看的冗余信息，服务端授权的唯一依据是
- * sub（用户 ID）加上拦截器回查数据库得到的最新 status/role，见 AuthInterceptor。
+ * 载荷中的 username/role 只是给前端和调试看的冗余信息，服务端授权的唯一依据是sub（用户 ID）加上拦截器回查数据库得到的最新 status/role，见 AuthInterceptor。
  * 令牌不加密，payload 任何人都能 Base64Url 解码，因此不得放入密码等敏感信息。
  */
 @Component
@@ -80,8 +79,7 @@ public class TokenUtil {
 
     /**
      * 校验并解析 JWT。
-     * 任何一步不通过都返回 null，不向外抛异常：调用方只需区分「有效 / 无效」，
-     * 不必知道失败原因（也不给探测者提供可区分的信息）。
+     * 任何一步不通过都返回 null，不向外抛异常：调用方只需区分「有效 / 无效」，不必知道失败原因（也不给探测者提供可区分的信息）。
      *
      * @return 校验通过的登录用户；令牌被篡改、格式非法或已过期返回 null
      */

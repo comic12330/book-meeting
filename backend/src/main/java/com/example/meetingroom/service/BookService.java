@@ -33,14 +33,9 @@ import java.util.List;
  * 预定业务：提交、取消、查询与审核。
  *
  * 本类的核心是「同一会议室同一时间段内只能存在一条有效预定记录」这一业务约束。
- * 按任务书要求，该约束不依赖前端时间控件，而是在后端两个环节各校验一次：
- * 提交环节 {@link #submit} 把「待审核」也算作占用，重叠的申请当场拒绝，
- * 保证进入待审队列的申请互不冲突；审核环节 {@link #approve} 只把「已通过」算作占用，
- * 并对会议室行加锁串行化，保证两条时段重叠的待审申请中只有一条能通过。
- * 两个环节用的是同一个判定方法 {@link #checkConflict}，差异只在参与判定的状态集合，
- * 见 {@link BookStatus#occupiedOnSubmit()} 与 {@link BookStatus#occupiedOnAudit()}。
- * 时间规则（单次时长上限、最多提前天数、每日可预定窗口）全部来自 sys_config 表，
- * 由管理员在「系统参数」页面维护，见 {@link SysConfigService}。改值即时生效，不需要重启。
+ * 按任务书要求，该约束不依赖前端时间控件，而是在后端两个环节各校验一次：提交环节 {@link #submit} 把「待审核」也算作占用，重叠的申请当场拒绝，保证进入待审队列的申请互不冲突；审核环节 {@link #approve} 只把「已通过」算作占用，并对会议室行加锁串行化，保证两条时段重叠的待审申请中只有一条能通过。
+ * 两个环节用的是同一个判定方法 {@link #checkConflict}，差异只在参与判定的状态集合，见 {@link BookStatus#occupiedOnSubmit()} 与 {@link BookStatus#occupiedOnAudit()}。
+ * 时间规则（单次时长上限、最多提前天数、每日可预定窗口）全部来自 sys_config 表，由管理员在「系统参数」页面维护，见 {@link SysConfigService}。改值即时生效，不需要重启。
  */
 @Service
 public class BookService {
@@ -60,11 +55,8 @@ public class BookService {
 
     /**
      * 提交预定申请，写入一条状态为 0（待审核）的记录。
-     * 校验顺序按代价从低到高排列：会议室是否存在且启用 → 时间区间是否合法 →
-     * 参会人数是否超过容量 → 时段是否冲突。前三个只需读一条会议室记录或纯内存判断，
-     * 冲突校验要扫预定表，放在最后可以避免为明显非法的请求多查一次库。
-     * 冲突校验在提交环节执行一次，参与判定的状态是「待审核 + 已通过」，
-     * 详见 {@link BookStatus#occupiedOnSubmit()}。
+     * 校验顺序按代价从低到高排列：会议室是否存在且启用 → 时间区间是否合法 →参会人数是否超过容量 → 时段是否冲突。前三个只需读一条会议室记录或纯内存判断，冲突校验要扫预定表，放在最后可以避免为明显非法的请求多查一次库。
+     * 冲突校验在提交环节执行一次，参与判定的状态是「待审核 + 已通过」，详见 {@link BookStatus#occupiedOnSubmit()}。
      *
      * @param dto    提交表单，已由 BookSubmitDTO 上的注解做过格式校验
      * @param userId 当前登录用户，由拦截器写入上下文，不接受前端传入
@@ -102,16 +94,13 @@ public class BookService {
 
     /**
      * 审核通过：把状态从 0（待审核）改为 1（通过），并执行第二次冲突校验。
-     * 这是全套约束的最后一道闸门。提交环节虽然已经拦过重叠申请，但两个用户可以并发提交，
-     * 各自读到「无冲突」后都插入成功，于是待审队列里可能出现两条时段重叠的申请。
+     * 这是全套约束的最后一道闸门。提交环节虽然已经拦过重叠申请，但两个用户可以并发提交，各自读到「无冲突」后都插入成功，于是待审队列里可能出现两条时段重叠的申请。
      * 此时靠这一环节保证只有一条能通过：先到的那条把会议室占住，后到的在这里被拒绝。
-     * 「通过」与「驳回」拆成两个方法，是因为操作日志要按动作区分类型：
-     * 一个方法只能挂一个注解，而管理员最常筛的就是谁批的、谁驳的。
+     * 「通过」与「驳回」拆成两个方法，是因为操作日志要按动作区分类型：一个方法只能挂一个注解，而管理员最常筛的就是谁批的、谁驳的。
      *
      * @param bookId 待审核的预定记录主键
      * @param dto    审核结果，status 必须为 1
-     * @throws BusinessException 结果非法、记录不存在、记录已被处理、
-     *                           使用时间已结束、或时段已被其他通过的预定占用时抛出
+     * @throws BusinessException 结果非法、记录不存在、记录已被处理、使用时间已结束、或时段已被其他通过的预定占用时抛出
      */
     @Transactional(rollbackFor = Exception.class)
     @LogOperation(type = OperationType.BOOK_AUDIT_APPROVE, target = "describe(#bookId)")
@@ -120,15 +109,12 @@ public class BookService {
             throw new BusinessException(400, "审核结果只能是通过或驳回");
         }
         MeetingBook book = requirePending(bookId);
-        // 已结束的申请不能再通过：否则通过后下一次定时任务立刻把它置为已完成，
-        // 状态相当于从「待审核」直接跳到「已完成」，历史记录里看不出中间通过过。
-        // 这里只拦「通过」不拦「驳回」——驳回是清理过期待审队列的唯一出口，
-        // 若把驳回也拦住，这些记录就只能进数据库手改。
+        // 已结束的申请不能再通过：否则通过后下一次定时任务立刻把它置为已完成，状态相当于从「待审核」直接跳到「已完成」，历史记录里看不出中间通过过。
+        // 这里只拦「通过」不拦「驳回」——驳回是清理过期待审队列的唯一出口，若把驳回也拦住，这些记录就只能进数据库手改。
         if (!book.getEndTime().isAfter(LocalDateTime.now())) {
             throw new BusinessException(1001, "该申请的使用时间已结束，不能再审核为通过");
         }
-        // 先锁住会议室行，把同一会议室的审核串行化；
-        // 两个管理员同时点「通过」时，后一个会等前一个提交完再校验，避免双双通过造成重复占用。
+        // 先锁住会议室行，把同一会议室的审核串行化；两个管理员同时点「通过」时，后一个会等前一个提交完再校验，避免双双通过造成重复占用。
         roomMapper.lockById(book.getRoomId());
         checkConflict(book.getRoomId(), book.getStartTime(), book.getEndTime(),
                 book.getId(), BookStatus.occupiedOnAudit());
@@ -162,12 +148,9 @@ public class BookService {
     /**
      * 取消预定，把记录状态置为 3（已取消）。
      * 状态为 3 的记录不再参与冲突判定，所以取消等同于释放该时段。
-     * 只允许取消「待审核」与「已通过」的记录，并且必须在会议开始之前操作，
-     * 已经开始的会议不能事后取消，否则历史记录会失去意义。
-     * 本方法只处理本人取消本人。管理员取消他人的预定走管理端的 {@link #adminCancel}，
-     * 那个动作影响他人利益，必须留下理由，且要记入操作日志。
-     * 取消只写 status / cancel_reason / cancel_time 三列，不再复用审核用的 updateStatus，
-     * 否则「审核通过 → 取消」的记录会丢掉审核时间。
+     * 只允许取消「待审核」与「已通过」的记录，并且必须在会议开始之前操作，已经开始的会议不能事后取消，否则历史记录会失去意义。
+     * 本方法只处理本人取消本人。管理员取消他人的预定走管理端的 {@link #adminCancel}，那个动作影响他人利益，必须留下理由，且要记入操作日志。
+     * 取消只写 status / cancel_reason / cancel_time 三列，不再复用审核用的 updateStatus，否则「审核通过 → 取消」的记录会丢掉审核时间。
      *
      * @param bookId 预定记录主键
      * @param userId 当前登录用户 ID
@@ -185,12 +168,8 @@ public class BookService {
 
     /**
      * 管理员取消他人的预定（行政取消）。
-     * 这个能力必须保留：员工离职、会议室被临时征用、重要接待需要清场，都属于
-     * 「本人已经联系不上但会议室还被占着」的情形，收回权限就只能进数据库手改。
-     * 但它是有代价的动作，因此做了三条约束：只挂在 {@code /api/admin/**} 下，
-     * 与其它管理动作一致，普通用户调不到；理由必填并落库，
-     * 被取消的人能在「我的预定」里看到为什么被取消；记入操作日志，
-     * 事后可查是谁在什么时候取消了谁的会议。
+     * 这个能力必须保留：员工离职、会议室被临时征用、重要接待需要清场，都属于「本人已经联系不上但会议室还被占着」的情形，收回权限就只能进数据库手改。
+     * 但它是有代价的动作，因此做了三条约束：只挂在 {@code /api/admin/**} 下，与其它管理动作一致，普通用户调不到；理由必填并落库，被取消的人能在「我的预定」里看到为什么被取消；记入操作日志，事后可查是谁在什么时候取消了谁的会议。
      *
      * @param bookId 预定记录主键
      * @param dto    取消理由，必填
@@ -210,14 +189,9 @@ public class BookService {
 
     /**
      * 把使用时间已结束的「已通过」预定批量置为「已完成」（状态 1 → 4）。
-     * 由定时任务 {@code com.example.meetingroom.task.BookStatusTask} 周期调用，
-     * 管理端另有一个手动触发接口，两者共用本方法，避免把同一段 SQL 写两遍。
-     * 幂等由 SQL 条件保证：判定是 {@code status = 1 AND end_time < NOW()}，
-     * 已经是 4 的记录不再命中，重复调用影响 0 行；多实例并发也是后到的影响 0 行，
-     * 不需要分布式锁。也不需要补跑机制，条件基于数据本身而不是「上次执行到哪」，
-     * 服务停机期间漏掉的记录，下次启动后第一次执行会自动补齐。
-     * 只改 status 一列，audit_msg / audit_time 原样保留，
-     * 所以没有复用 {@link MeetingBookMapper#updateStatus}。
+     * 由定时任务 {@code com.example.meetingroom.task.BookStatusTask} 周期调用，管理端另有一个手动触发接口，两者共用本方法，避免把同一段 SQL 写两遍。
+     * 幂等由 SQL 条件保证：判定是 {@code status = 1 AND end_time < NOW()}，已经是 4 的记录不再命中，重复调用影响 0 行；多实例并发也是后到的影响 0 行，不需要分布式锁。也不需要补跑机制，条件基于数据本身而不是「上次执行到哪」，服务停机期间漏掉的记录，下次启动后第一次执行会自动补齐。
+     * 只改 status 一列，audit_msg / audit_time 原样保留，所以没有复用 {@link MeetingBookMapper#updateStatus}。
      *
      * @return 本次被置为已完成的记录条数，0 表示没有待处理的记录
      */
@@ -238,8 +212,7 @@ public class BookService {
 
     /**
      * 管理端：分页查询全部预定，支持按状态、会议室与关键字（申请人或会议用途）筛选。
-     * 排序为「状态升序 + 提交时间倒序」（见 MeetingBookMapper.xml），
-     * 待审核的记录排在最前，管理员打开页面即可优先处理待办。
+     * 排序为「状态升序 + 提交时间倒序」（见 MeetingBookMapper.xml），待审核的记录排在最前，管理员打开页面即可优先处理待办。
      */
     public PageResult<BookVO> pageForAdmin(BookQueryDTO query) {
         PageHelper.startPage(query.safePageNum(), query.safePageSize());
@@ -317,13 +290,9 @@ public class BookService {
 
     /**
      * 时间区间合法性校验。全部在后端判断，不依赖前端时间控件。
-     * 四条规则里，前两条是固定业务常识，后两条的阈值来自 sys_config，管理员可在线调整：
-     * 结束必须晚于开始；开始不能早于当前时刻（精确到分钟）；
-     * 最多提前 {@code booking.max-advance-days} 天，防止长期占位；
-     * 开始时刻必须落在 {@code booking.daily-start} ~ {@code booking.daily-end} 之间。
+     * 四条规则里，前两条是固定业务常识，后两条的阈值来自 sys_config，管理员可在线调整：结束必须晚于开始；开始不能早于当前时刻（精确到分钟）；最多提前 {@code booking.max-advance-days} 天，防止长期占位；开始时刻必须落在 {@code booking.daily-start} ~ {@code booking.daily-end} 之间。
      * 另外限制单次跨度不超过 {@code booking.max-hours} 小时。
-     * 第四条只约束开始时刻：任务书要求支持跨天（如 19:00 至次日 01:00），
-     * 若把结束时刻也限制在同一天的可预定窗口内，跨天场景就无法提交。
+     * 第四条只约束开始时刻：任务书要求支持跨天（如 19:00 至次日 01:00），若把结束时刻也限制在同一天的可预定窗口内，跨天场景就无法提交。
      * 结束时间通过跨度上限间接约束，不会被无限拉长。
      */
     private void checkTimeRange(LocalDateTime start, LocalDateTime end) {

@@ -18,8 +18,7 @@ import java.util.List;
 /**
  * 管理端公告维护：新增、编辑、删除、查看全部。
  *
- * 与首页的 NoticeController 区别在于这里返回全部记录（含 is_show = 0 的），
- * 并把展示中的排在前面，便于管理员区分正在展示与已下架留档。
+ * 与首页的 NoticeController 区别在于这里返回全部记录（含 is_show = 0 的），并把展示中的排在前面，便于管理员区分正在展示与已下架留档。
  */
 @RestController
 @RequestMapping("/api/admin/notices")

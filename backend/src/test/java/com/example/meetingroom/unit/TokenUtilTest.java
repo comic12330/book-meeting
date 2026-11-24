@@ -20,11 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 令牌签发与校验的单元测试。
  *
- * 不启动 Spring 容器：{@link TokenUtil} 的两个配置项用反射直接注入，
- * 这样测试只验证算法与校验逻辑本身，不受数据源、Web 环境的影响。
- * 覆盖的是「令牌被伪造会怎样」，而不是「正常签发能用」，后者几乎不可能写错，
- * 前者才是这套代码存在的意义。其中 alg=none 一条必须用真密钥重算签名，
- * 否则无法区分「被算法校验拦住」和「验签恰好失败」。
+ * 不启动 Spring 容器：{@link TokenUtil} 的两个配置项用反射直接注入，这样测试只验证算法与校验逻辑本身，不受数据源、Web 环境的影响。
+ * 覆盖的是「令牌被伪造会怎样」，而不是「正常签发能用」，后者几乎不可能写错，前者才是这套代码存在的意义。其中 alg=none 一条必须用真密钥重算签名，否则无法区分「被算法校验拦住」和「验签恰好失败」。
  */
 class TokenUtilTest {
 
@@ -107,9 +104,7 @@ class TokenUtilTest {
         String token = tokenUtil.create(2L, "zhangsan", 0);
         String[] parts = token.split("\\.");
 
-        // 改签名段的首个字符，而不是末位：32 字节摘要的 Base64Url 编码有 43 个字符，
-        // 末位字符只含 4 个有效位、低 2 位是补位噪声，改它可能解码出完全相同的字节，
-        // 测试就变成「没篡改也通过」的假阴性。
+        // 改签名段的首个字符，而不是末位：32 字节摘要的 Base64Url 编码有 43 个字符，末位字符只含 4 个有效位、低 2 位是补位噪声，改它可能解码出完全相同的字节，测试就变成「没篡改也通过」的假阴性。
         char first = parts[2].charAt(0);
         char flipped = first == 'A' ? 'B' : 'A';
         String forged = parts[0] + "." + parts[1] + "." + flipped + parts[2].substring(1);

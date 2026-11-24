@@ -30,8 +30,7 @@ public class SysConfig {
     private LocalDateTime updateTime;
 
     /*
-     * 以下三个字段不是表列，由 SysConfigService 读取时按 SysConfigKey 枚举回填，
-     * 供管理页面决定输入控件类型与取值范围，避免前端再硬编码一遍规则。
+     * 以下三个字段不是表列，由 SysConfigService 读取时按 SysConfigKey 枚举回填，供管理页面决定输入控件类型与取值范围，避免前端再硬编码一遍规则。
      */
 
     /** 值类型：INT 或 TIME */

@@ -3,8 +3,7 @@ package com.example.meetingroom.common;
 /**
  * 分页查询基类，供各查询 DTO 继承。
  *
- * 单页条数的上限与默认值取自 application.yml 的 meeting.page 段
- * （见 {@link AppProperties}），不再写死在本类里。
+ * 单页条数的上限与默认值取自 application.yml 的 meeting.page 段（见 {@link AppProperties}），不再写死在本类里。
  * 上限的作用是防止前端传一个极大值把整表拉出来。
  */
 public class PageQuery {

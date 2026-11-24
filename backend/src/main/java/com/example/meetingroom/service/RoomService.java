@@ -22,12 +22,9 @@ import java.util.List;
 /**
  * 会议室资源管理：增删改查与状态维护。
  *
- * 两个查询入口共用同一套条件查询，区别只在状态：用户端强制 status=1，
- * 只看得到启用中的会议室；管理端不加状态限制，停用的也要能维护。
- * 删除做了一层保护：只要存在历史预定记录就不允许物理删除，引导改为「停用」，
- * 否则预定表里的 room_id 会指向一条不存在的会议室，历史记录无法追溯。
- * 容纳人数上限来自 sys_config 的 {@code room.max-capacity}，管理员可在线调整，
- * 不再写死在代码或前端控件里。
+ * 两个查询入口共用同一套条件查询，区别只在状态：用户端强制 status=1，只看得到启用中的会议室；管理端不加状态限制，停用的也要能维护。
+ * 删除做了一层保护：只要存在历史预定记录就不允许物理删除，引导改为「停用」，否则预定表里的 room_id 会指向一条不存在的会议室，历史记录无法追溯。
+ * 容纳人数上限来自 sys_config 的 {@code room.max-capacity}，管理员可在线调整，不再写死在代码或前端控件里。
  */
 @Service
 public class RoomService {
@@ -54,8 +51,7 @@ public class RoomService {
 
     /**
      * 分页查询的公共实现：设置分页参数后执行条件查询，再包装成统一的分页结果。
-     * PageHelper 采用 ThreadLocal 传递分页参数，startPage 之后紧跟的第一条查询才会被分页，
-     * 所以这里只放一条 select，中间不能插入其它查询，否则分页会作用到错误的语句上。
+     * PageHelper 采用 ThreadLocal 传递分页参数，startPage 之后紧跟的第一条查询才会被分页，所以这里只放一条 select，中间不能插入其它查询，否则分页会作用到错误的语句上。
      */
     private PageResult<MeetingRoom> doPage(RoomQueryDTO query) {
         PageHelper.startPage(query.safePageNum(), query.safePageSize());
@@ -92,8 +88,7 @@ public class RoomService {
 
     /**
      * 编辑会议室信息。先确认记录存在，再把表单覆盖到该记录上。
-     * 已通过的预定不受影响：改容量或位置不会回头校验历史预定的参会人数，
-     * 因为历史记录反映的是当时的实际情况，不应随会议室信息变动而被追溯修改。
+     * 已通过的预定不受影响：改容量或位置不会回头校验历史预定的参会人数，因为历史记录反映的是当时的实际情况，不应随会议室信息变动而被追溯修改。
      */
     @Transactional(rollbackFor = Exception.class)
     @LogOperation(type = OperationType.ROOM_UPDATE, target = "#dto.roomName")
@@ -107,9 +102,7 @@ public class RoomService {
 
     /**
      * 删除前先确认没有历史预定记录：有则引导改为「停用」，避免破坏历史数据。
-     * 日志的对象描述用 {@code get(#id).roomName} 换出名称：删除只拿到主键，
-     * 光记一个 id 事后看不出删的是哪间会议室。这里多一次按主键取数，
-     * 对低频的管理操作可以接受。
+     * 日志的对象描述用 {@code get(#id).roomName} 换出名称：删除只拿到主键，光记一个 id 事后看不出删的是哪间会议室。这里多一次按主键取数，对低频的管理操作可以接受。
      */
     @Transactional(rollbackFor = Exception.class)
     @LogOperation(type = OperationType.ROOM_DELETE, target = "get(#id).roomName")
@@ -125,8 +118,7 @@ public class RoomService {
 
     /**
      * 容纳人数上限校验。
-     * 下限 1 由 {@link RoomSaveDTO} 的 {@code @Min(1)} 保证，上限读配置
-     * （{@code room.max-capacity}），因为它是管理员可调整的运营参数而非固定规则。
+     * 下限 1 由 {@link RoomSaveDTO} 的 {@code @Min(1)} 保证，上限读配置（{@code room.max-capacity}），因为它是管理员可调整的运营参数而非固定规则。
      * 前端控件上的最大值也从同一个参数取，两处口径一致。
      */
     private void checkCapacity(Integer capacity) {
@@ -141,8 +133,7 @@ public class RoomService {
 
     /**
      * 把保存表单转换成实体，并统一做去空格与默认值处理。
-     * 设备与备注允许为空，统一存空串而不是 null，避免前端回显时出现 "null" 字样；
-     * 状态为空时按启用处理。
+     * 设备与备注允许为空，统一存空串而不是 null，避免前端回显时出现 "null" 字样；状态为空时按启用处理。
      */
     private MeetingRoom toEntity(RoomSaveDTO dto) {
         MeetingRoom room = new MeetingRoom();

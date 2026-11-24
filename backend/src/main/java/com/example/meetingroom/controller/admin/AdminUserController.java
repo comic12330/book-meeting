@@ -21,8 +21,7 @@ import javax.validation.Valid;
 /**
  * 管理端用户管理：列表、新增、编辑、启用/停用、重置密码。
  * 路径位于 /api/admin/** 下，管理员身份由 AuthInterceptor 统一校验。
- * 不提供物理删除——user 表被 meeting_book.user_id 引用，删人会破坏历史预定记录，
- * 需要「移除」时改为停用。
+ * 不提供物理删除——user 表被 meeting_book.user_id 引用，删人会破坏历史预定记录，需要「移除」时改为停用。
  */
 @RestController
 @RequestMapping("/api/admin/users")
@@ -59,8 +58,7 @@ public class AdminUserController {
 
     /**
      * 启用或停用账号。
-     * 停用后该账号的令牌立刻失效——拦截器每次请求都会回查数据库状态，
-     * 不是等令牌自然过期才生效。
+     * 停用后该账号的令牌立刻失效——拦截器每次请求都会回查数据库状态，不是等令牌自然过期才生效。
      */
     @PutMapping("/{id}/status/{status}")
     public Result<Void> updateStatus(@PathVariable Long id, @PathVariable Integer status) {

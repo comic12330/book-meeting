@@ -8,9 +8,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * 启动类。
  *
- * {@code @EnableScheduling} 用于开启定时任务，当前只有一项：
- * 把使用时间已结束的预定自动置为「已完成」，见
- * {@code com.example.meetingroom.task.BookStatusTask}。
+ * {@code @EnableScheduling} 用于开启定时任务，当前只有一项：把使用时间已结束的预定自动置为「已完成」，见{@code com.example.meetingroom.task.BookStatusTask}。
  */
 @SpringBootApplication
 @EnableScheduling

@@ -15,8 +15,7 @@ import java.util.List;
 /**
  * 公告管理。
  *
- * 公告有两个可见范围：首页只取 is_show = 1 的记录（{@link #listShow}），
- * 管理端取全部（{@link #listAll}），过期的公告可以置为隐藏留档而不必删除。
+ * 公告有两个可见范围：首页只取 is_show = 1 的记录（{@link #listShow}），管理端取全部（{@link #listAll}），过期的公告可以置为隐藏留档而不必删除。
  * 首页取数时在 SQL 层就过滤掉隐藏记录，不依赖前端判断，避免把不该公开的内容传到浏览器。
  */
 @Service
@@ -33,8 +32,7 @@ public class NoticeService {
     }
 
     /**
-     * 管理端用：返回全部公告，含已隐藏的，按「展示优先 + 发布时间倒序」排列，
-     * 便于管理员看到哪些公告已经下架留档。
+     * 管理端用：返回全部公告，含已隐藏的，按「展示优先 + 发布时间倒序」排列，便于管理员看到哪些公告已经下架留档。
      */
     public List<Notice> listAll() {
         return noticeMapper.selectAll();
@@ -78,8 +76,7 @@ public class NoticeService {
     }
 
     /**
-     * 删除公告。公告不参与任何业务判定，可以物理删除；
-     * 若只是想从首页撤下但保留内容，应编辑并把 isShow 置为 0，而不是删除。
+     * 删除公告。公告不参与任何业务判定，可以物理删除；若只是想从首页撤下但保留内容，应编辑并把 isShow 置为 0，而不是删除。
      */
     @Transactional(rollbackFor = Exception.class)
     @LogOperation(type = OperationType.NOTICE_DELETE, target = "describe(#id)")
@@ -92,8 +89,7 @@ public class NoticeService {
 
     /**
      * 供操作日志取对象的可读描述，返回公告标题。
-     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#id)")}），
-     * 删除只拿到主键，光记 id 事后看不出删的是哪条公告。查不到时返回 null，切面会忽略。
+     * 由切面的 SpEL 调用（见 {@code @LogOperation(target = "describe(#id)")}），删除只拿到主键，光记 id 事后看不出删的是哪条公告。查不到时返回 null，切面会忽略。
      */
     public String describe(Long id) {
         Notice notice = noticeMapper.findById(id);

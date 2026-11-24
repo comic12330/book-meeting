@@ -21,8 +21,7 @@ import javax.validation.Valid;
 /**
  * 用户端预定操作：提交申请、查我的预定、看详情、取消。
  *
- * 四个接口都在拦截器保护范围内。当前用户 ID 一律取自 UserContext（由令牌解析得到），
- * 不从请求参数接收，否则改个 userId 就能替别人提交或取消。
+ * 四个接口都在拦截器保护范围内。当前用户 ID 一律取自 UserContext（由令牌解析得到），不从请求参数接收，否则改个 userId 就能替别人提交或取消。
  * 前端的时间选择器只负责交互体验，冲突判定完全由后端完成，见 BookService 的说明。
  */
 @RestController
@@ -61,8 +60,7 @@ public class BookController {
     }
 
     /**
-     * 取消预定。只有尚未开始、且状态为待审核或已通过的记录可以取消；
-     * 取消后该时段立即释放，可以重新被别人预定。
+     * 取消预定。只有尚未开始、且状态为待审核或已通过的记录可以取消；取消后该时段立即释放，可以重新被别人预定。
      */
     @PutMapping("/{id}/cancel")
     public Result<Void> cancel(@PathVariable Long id) {

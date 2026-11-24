@@ -34,8 +34,7 @@ public final class UserContext {
 
     /**
      * 请求结束时清理。
-     * ThreadLocal 绑在线程上，Tomcat 的工作线程会被复用，
-     * 不清理会让下一个请求读到上一个用户的身份，造成越权。
+     * ThreadLocal 绑在线程上，Tomcat 的工作线程会被复用，不清理会让下一个请求读到上一个用户的身份，造成越权。
      */
     public static void clear() {
         HOLDER.remove();

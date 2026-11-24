@@ -19,8 +19,7 @@ import javax.validation.Valid;
 /**
  * 登录认证接口。
  *
- * 三个接口的鉴权范围不同：/login 与 /register 在 WebConfig 中被排除在拦截器之外，
- * 允许匿名访问；/me 需要携带令牌，前端刷新页面后靠它恢复登录态与角色。
+ * 三个接口的鉴权范围不同：/login 与 /register 在 WebConfig 中被排除在拦截器之外，允许匿名访问；/me 需要携带令牌，前端刷新页面后靠它恢复登录态与角色。
  * 密码比对、停用判断等规则都在 UserService 内，Controller 只负责组织响应。
  */
 @RestController
@@ -40,8 +39,7 @@ public class AuthController {
     }
 
     /**
-     * 自助注册。角色固定为普通用户、状态固定为可用，两者都不接受前端指定，
-     * 否则可以构造请求把自己注册成管理员。
+     * 自助注册。角色固定为普通用户、状态固定为可用，两者都不接受前端指定，否则可以构造请求把自己注册成管理员。
      */
     @PostMapping("/register")
     public Result<Void> register(@RequestBody @Valid RegisterDTO dto) {
@@ -50,8 +48,7 @@ public class AuthController {
     }
 
     /**
-     * 取当前登录用户资料。用户 ID 来自令牌解析结果，不从请求参数接收；
-     * 返回体中的密码字段已被置空。
+     * 取当前登录用户资料。用户 ID 来自令牌解析结果，不从请求参数接收；返回体中的密码字段已被置空。
      */
     @GetMapping("/me")
     public Result<User> me() {

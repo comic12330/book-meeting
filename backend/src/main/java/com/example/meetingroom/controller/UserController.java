@@ -17,8 +17,7 @@ import javax.validation.Valid;
 /**
  * 个人中心：查看资料、修改资料、修改密码。
  *
- * 三个接口都只作用于当前登录用户，用户 ID 来自令牌解析结果（UserContext），
- * 不接受前端传入 ID，因此不存在改到别人资料的可能。
+ * 三个接口都只作用于当前登录用户，用户 ID 来自令牌解析结果（UserContext），不接受前端传入 ID，因此不存在改到别人资料的可能。
  */
 @RestController
 @RequestMapping("/api/user")
@@ -36,8 +35,7 @@ public class UserController {
     }
 
     /**
-     * 修改本人资料。服务层只取真实姓名与手机号两个字段，
-     * 请求体里即使带上 role、status 也会被忽略。
+     * 修改本人资料。服务层只取真实姓名与手机号两个字段，请求体里即使带上 role、status 也会被忽略。
      */
     @PutMapping("/profile")
     public Result<Void> updateProfile(@RequestBody User form) {

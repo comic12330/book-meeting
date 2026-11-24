@@ -48,8 +48,7 @@ public class GlobalExceptionHandler {
     public Result<Void> handleUnreadable(HttpMessageNotReadableException e) {
         log.warn("请求体解析失败：{}", e.getMessage());
         Throwable cause = e.getCause();
-        // 只有确实是时间字段解析失败才提示时间格式，其余情形（空请求体、非法字符、JSON 结构错误）
-        // 一律给通用提示，避免把排查方向带偏。
+        // 只有确实是时间字段解析失败才提示时间格式，其余情形（空请求体、非法字符、JSON 结构错误）一律给通用提示，避免把排查方向带偏。
         if (cause instanceof InvalidFormatException
                 && LocalDateTime.class.isAssignableFrom(((InvalidFormatException) cause).getTargetType())) {
             return Result.error(400, "时间格式不正确，应为 yyyy-MM-dd HH:mm:ss");

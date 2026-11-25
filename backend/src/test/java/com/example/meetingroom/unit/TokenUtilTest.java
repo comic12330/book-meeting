@@ -173,6 +173,7 @@ class TokenUtilTest {
 
     // ------------------------------------------------------------ 辅助方法
 
+    /** Base64Url 编码，不带补位符，与令牌实现保持一致 */
     private static String base64Url(byte[] bytes) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }

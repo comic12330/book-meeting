@@ -6,6 +6,9 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
+/**
+ * 自助注册的表单，只接收账号、密码、姓名与电话，角色和状态由服务端固定。
+ */
 public class RegisterDTO {
 
     /** 登录账号 */

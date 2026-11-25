@@ -12,8 +12,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class AppProperties {
 
+    /** 默认每页条数，容器启动时由 setter 从配置文件写入 */
     private static int defaultPageSize = 10;
 
+    /** 单页条数上限，防止一次拉全表 */
     private static int maxPageSize = 100;
 
     @Value("${meeting.page.default-size:10}")
@@ -26,10 +28,12 @@ public class AppProperties {
         AppProperties.maxPageSize = value;
     }
 
+    /** 默认每页条数 */
     public static int defaultPageSize() {
         return defaultPageSize;
     }
 
+    /** 单页条数上限 */
     public static int maxPageSize() {
         return maxPageSize;
     }

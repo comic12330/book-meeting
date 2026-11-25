@@ -2,6 +2,9 @@ package com.example.meetingroom.vo;
 
 import java.time.LocalDateTime;
 
+/**
+ * 预定的列表与详情返回对象，在实体字段之外附带会议室名称、位置与申请人姓名，前端不必再逐个查。
+ */
 public class BookVO {
 
     /** 预定单 ID */

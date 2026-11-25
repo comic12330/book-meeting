@@ -5,10 +5,13 @@ package com.example.meetingroom.common;
  */
 public class LoginUser {
 
+    /** 用户 ID，服务端授权与数据归属判断都以它为准 */
     private final Long userId;
 
+    /** 登录账号，只用于展示 */
     private final String username;
 
+    /** 角色：0 普通用户，1 管理员 */
     private final Integer role;
 
     /**

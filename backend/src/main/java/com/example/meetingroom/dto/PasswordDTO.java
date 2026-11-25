@@ -6,6 +6,9 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
+/**
+ * 修改本人密码的表单：原密码与新密码。
+ */
 public class PasswordDTO {
 
     /** 原密码 */

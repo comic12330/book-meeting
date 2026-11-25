@@ -43,15 +43,22 @@ public class OperationLogAspect {
     /** 与表结构一致，避免超长串把插入打挂 */
     private static final int MAX_MSG_LENGTH = 255;
 
+    /** 操作对象描述的最大长度，与表字段长度一致，超出截断 */
     private static final int MAX_TARGET_LENGTH = 200;
 
+    /** SpEL 解析器，本身无状态，全局共用一个即可 */
     private static final ExpressionParser PARSER = new SpelExpressionParser();
 
+    /** 取方法参数名，注解里的表达式要写 #参数名 时依赖它 */
     private static final ParameterNameDiscoverer NAME_DISCOVERER = new DefaultParameterNameDiscoverer();
 
     @Resource
     private OperationLogService logService;
 
+    /**
+     * 拦截带 {@link LogOperation} 的方法：正常返回时记成功日志，抛异常时记失败日志并把异常原样抛出。
+     * 操作人在进入方法时取出，之后不再读 ThreadLocal。
+     */
     @Around("@annotation(annotation)")
     public Object around(ProceedingJoinPoint pjp, LogOperation annotation) throws Throwable {
         LoginUser user = UserContext.get();
@@ -75,6 +82,7 @@ public class OperationLogAspect {
 
     // ------------------------------------------------------------ 私有方法
 
+    /** 按注解与本次调用结果组装一条日志实体 */
     private OperationLog buildLog(LoginUser user, LogOperation annotation, String target,
                                   int result, String resultMsg) {
         OperationLog entity = new OperationLog();
@@ -107,6 +115,7 @@ public class OperationLogAspect {
         }
     }
 
+    /** 写日志并吞掉写入异常：日志是旁路，写失败只告警，不影响业务 */
     private void writeQuietly(OperationLog entity) {
         try {
             logService.record(entity);

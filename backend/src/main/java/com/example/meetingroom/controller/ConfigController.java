@@ -21,6 +21,7 @@ public class ConfigController {
     @Resource
     private SysConfigService configService;
 
+    /** 读取前端需要用到的业务参数，按参数键返回 */
     @GetMapping
     public Result<Map<String, String>> configs() {
         return Result.success(configService.publicMap());

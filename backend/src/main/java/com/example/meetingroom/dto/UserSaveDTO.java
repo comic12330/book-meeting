@@ -22,10 +22,12 @@ public class UserSaveDTO {
             message = "密码长度需在 6-32 位之间")
     private String password;
 
+    /** 真实姓名 */
     @NotBlank(message = "请输入真实姓名")
     @Size(max = 50, message = "真实姓名不超过 50 个字符")
     private String realName;
 
+    /** 联系电话，允许为空 */
     @Pattern(regexp = "^$|^1[3-9]\\d{9}$", message = "手机号格式不正确")
     private String phone;
 

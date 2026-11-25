@@ -17,6 +17,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Resource
     private AuthInterceptor authInterceptor;
 
+    /** 注册登录拦截器：/api/** 全部校验，只放行登录与注册 */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
@@ -27,6 +28,7 @@ public class WebConfig implements WebMvcConfigurer {
                 );
     }
 
+    /** 跨域配置：允许前端开发服务器带凭证访问后端接口 */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")

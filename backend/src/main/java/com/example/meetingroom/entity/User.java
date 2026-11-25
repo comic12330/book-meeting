@@ -2,6 +2,9 @@ package com.example.meetingroom.entity;
 
 import java.time.LocalDateTime;
 
+/**
+ * 用户账号，对应 user 表，字段与表列一一对应。
+ */
 public class User {
 
     /** 主键 */

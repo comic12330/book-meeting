@@ -32,12 +32,16 @@ public class TokenUtil {
     /** 仅标识令牌类型，不参与校验 */
     private static final String JWT_TYPE = "JWT";
 
+    /** 签名算法，与 header 里的 alg 取值对应 */
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
+    /** 令牌三段的连接符 */
     private static final char SEPARATOR = '.';
 
+    /** Base64Url 编码器，不带补位符 */
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
+    /** Base64Url 解码器 */
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
     /**
@@ -46,9 +50,11 @@ public class TokenUtil {
      */
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** 签名密钥，来自配置文件 */
     @Value("${meeting.token.secret}")
     private String secret;
 
+    /** 令牌有效期，单位秒 */
     @Value("${meeting.token.expire-seconds}")
     private long expireSeconds;
 
@@ -143,14 +149,17 @@ public class TokenUtil {
         }
     }
 
+    /** Base64Url 编码 */
     private String encode(byte[] bytes) {
         return ENCODER.encodeToString(bytes);
     }
 
+    /** Base64Url 解码 */
     private byte[] decode(String part) {
         return DECODER.decode(part);
     }
 
+    /** 把 JSON 节点序列化成字节，供编码与签名使用 */
     private byte[] toJson(JsonNode node) {
         try {
             return MAPPER.writeValueAsBytes(node);

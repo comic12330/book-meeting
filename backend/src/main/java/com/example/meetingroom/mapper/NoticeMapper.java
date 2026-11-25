@@ -5,6 +5,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * 公告表的数据访问接口，SQL 语句写在 NoticeMapper.xml 中。
+ */
 public interface NoticeMapper {
 
     /** 首页用：只取 is_show = 1 的公告 */

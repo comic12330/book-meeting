@@ -5,6 +5,7 @@ package com.example.meetingroom.common;
  */
 public class BusinessException extends RuntimeException {
 
+    /** 业务状态码，会原样放进 Result.code */
     private final Integer code;
 
     public BusinessException(String message) {

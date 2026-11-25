@@ -64,8 +64,10 @@ public enum OperationType {
         }
     }
 
+    /** 所属模块，写入 operation_log.module */
     private final Module module;
 
+    /** 动作名称，管理页面显示用 */
     private final String label;
 
     OperationType(Module module, String label) {

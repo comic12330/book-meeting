@@ -4,6 +4,9 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
+/**
+ * 新增与编辑会议室共用的表单。
+ */
 public class RoomSaveDTO {
 
     /** 会议室名称 */

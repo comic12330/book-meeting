@@ -2,6 +2,9 @@ package com.example.meetingroom.dto;
 
 import com.example.meetingroom.common.PageQuery;
 
+/**
+ * 会议室列表的查询条件，分页参数来自父类 PageQuery。
+ */
 public class RoomQueryDTO extends PageQuery {
 
     /** 名称模糊查询 */

@@ -29,6 +29,10 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Resource
     private UserMapper userMapper;
 
+    /**
+     * 令牌校验入口：放行跨域预检，令牌无效抛 401，非管理员访问 /api/admin/ 抛 403。
+     * 账号状态与角色以数据库为准，校验通过后把当前用户写进 UserContext。
+     */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         if (HttpMethod.OPTIONS.matches(request.getMethod()) || !(handler instanceof HandlerMethod)) {
@@ -66,6 +70,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         return true;
     }
 
+    /** 请求结束清理 ThreadLocal，避免线程被复用时残留上一位用户的身份 */
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         UserContext.clear();

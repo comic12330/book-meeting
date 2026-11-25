@@ -8,8 +8,10 @@ package com.example.meetingroom.common;
  */
 public class PageQuery {
 
+    /** 页码，从 1 开始，非法值由 safePageNum 兜底 */
     private Integer pageNum = 1;
 
+    /** 每页条数，为空时取配置里的默认值 */
     private Integer pageSize;
 
     /** 防止前端传非法页码导致 PageHelper 异常 */

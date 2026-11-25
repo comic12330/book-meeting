@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * 用户表的数据访问接口，SQL 语句写在 UserMapper.xml 中。
+ */
 public interface UserMapper {
 
     /** 登录与注册重名检查用，username 在表上是唯一索引，LIMIT 1 只是防止意外多行 */

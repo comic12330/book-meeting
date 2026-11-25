@@ -45,10 +45,12 @@ public final class BookStatus {
     private BookStatus() {
     }
 
+    /** 提交环节参与冲突判定的状态集合：待审核与已通过 */
     public static List<Integer> occupiedOnSubmit() {
         return OCCUPIED_ON_SUBMIT;
     }
 
+    /** 审核环节参与冲突判定的状态集合：只有已通过 */
     public static List<Integer> occupiedOnAudit() {
         return OCCUPIED_ON_AUDIT;
     }

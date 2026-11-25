@@ -4,6 +4,9 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
+/**
+ * 登录表单：账号与密码。
+ */
 public class LoginDTO {
 
     /** 登录账号 */

@@ -36,6 +36,7 @@ public class JacksonConfig {
             .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
             .toFormatter();
 
+    /** 注册 LocalDateTime 的序列化与反序列化规则，输入输出都走同一个格式化器 */
     @Bean
     public Jackson2ObjectMapperBuilderCustomizer localDateTimeCustomizer() {
         return builder -> {

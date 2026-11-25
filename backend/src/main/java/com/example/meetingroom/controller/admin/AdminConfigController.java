@@ -26,11 +26,13 @@ public class AdminConfigController {
     @Resource
     private SysConfigService configService;
 
+    /** 查看全部业务参数，含名称、取值范围与当前值 */
     @GetMapping
     public Result<List<SysConfig>> list() {
         return Result.success(configService.list());
     }
 
+    /** 修改单个参数的值，保存后立即生效 */
     @PutMapping
     public Result<Void> update(@RequestBody @Valid ConfigSaveDTO dto) {
         configService.update(dto.getConfigKey(), dto.getConfigValue());

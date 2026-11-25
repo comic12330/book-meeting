@@ -40,8 +40,10 @@ import java.util.List;
 @Service
 public class BookService {
 
+    /** 日志描述里的日期时间格式 */
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    /** 每日可预定窗口的时分格式 */
     private static final DateTimeFormatter CLOCK_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     @Resource

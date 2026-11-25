@@ -8,9 +8,11 @@ import javax.validation.constraints.NotBlank;
  */
 public class ConfigSaveDTO {
 
+    /** 参数键，如 booking.max-hours */
     @NotBlank(message = "请指定参数项")
     private String configKey;
 
+    /** 新的参数值，按该参数的取值范围校验 */
     @NotBlank(message = "参数值不能为空")
     private String configValue;
 

@@ -39,14 +39,23 @@ public enum SysConfigKey {
         TIME
     }
 
+    /** 参数键，与 sys_config.config_key 对应，代码读取参数时也用它 */
     private final String key;
+    /** 参数名称，管理页面显示用 */
     private final String name;
+    /** 单位，如「人」「小时」「天」，只用于展示 */
     private final String unit;
+    /** 默认值，库里缺少该行时用它兜底 */
     private final String defaultValue;
+    /** 值类型，决定校验方式与前端输入控件 */
     private final ValueType type;
+    /** 允许的最小值，仅 INT 类型有效 */
     private final int min;
+    /** 允许的最大值，仅 INT 类型有效 */
     private final int max;
+    /** 管理页面上的显示顺序 */
     private final int sortNo;
+    /** 说明文字，页面上提示这个参数影响什么 */
     private final String remark;
 
     SysConfigKey(String key, String name, String unit, String defaultValue,

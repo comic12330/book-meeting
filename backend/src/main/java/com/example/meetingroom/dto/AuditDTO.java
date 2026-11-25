@@ -4,6 +4,9 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
+/**
+ * 审核申请的表单：审核结果与审核意见。
+ */
 public class AuditDTO {
 
     /** 1 通过，2 驳回 */

@@ -7,6 +7,9 @@ import org.apache.ibatis.annotations.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 预定表的数据访问接口，SQL 语句写在 MeetingBookMapper.xml 中。
+ */
 public interface MeetingBookMapper {
 
     /**
@@ -22,20 +25,27 @@ public interface MeetingBookMapper {
                       @Param("excludeId") Long excludeId,
                       @Param("statuses") List<Integer> statuses);
 
+    /** 新增预定，回填自增主键 */
     int insert(MeetingBook book);
 
+    /** 按主键取预定记录，只含表字段，不带会议室与申请人信息 */
     MeetingBook findById(@Param("id") Long id);
 
+    /** 按主键取详情，额外带会议室名称、位置与申请人姓名，供详情接口使用 */
     BookVO findVOById(@Param("id") Long id);
 
+    /** 用户端「我的预定」：按申请人查询，状态为空表示全部 */
     List<BookVO> selectMyBooks(@Param("userId") Long userId, @Param("status") Integer status);
 
+    /** 管理端预定列表：按状态、会议室与关键字筛选，关键字匹配申请人或会议用途 */
     List<BookVO> selectForAdmin(@Param("status") Integer status,
                                 @Param("roomId") Long roomId,
                                 @Param("keyword") String keyword);
 
+    /** 统计某会议室被预定过的条数，删除会议室前用它判断是否存在历史引用 */
     int countByRoom(@Param("roomId") Long roomId);
 
+    /** 审核结果写回：状态、审核意见与审核时间一起更新 */
     int updateStatus(@Param("id") Long id,
                      @Param("status") Integer status,
                      @Param("auditMsg") String auditMsg,

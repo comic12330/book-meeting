@@ -34,10 +34,13 @@ public class SysConfigService {
     /** 时间型参数的格式：HH:mm */
     private static final Pattern TIME_PATTERN = Pattern.compile("^([01]\\d|2[0-3]):[0-5]\\d$");
 
+    /** 时间参数的时分格式，与上面的校验正则对应 */
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    /** 参数值缓存，键为参数键；首次访问时整表加载，保存后直接回写 */
     private final Map<String, String> cache = new ConcurrentHashMap<>();
 
+    /** 是否已从库里加载过，避免每次读取都查库 */
     private volatile boolean loaded = false;
 
     @Resource
@@ -122,6 +125,7 @@ public class SysConfigService {
 
     // ------------------------------------------------------------ 私有方法
 
+    /** 取参数的原始值，库里缺失或存了空串时回落枚举里的默认值 */
     private String raw(SysConfigKey key) {
         ensureLoaded();
         String value = cache.get(key.getKey());

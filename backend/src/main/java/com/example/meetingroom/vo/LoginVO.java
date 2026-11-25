@@ -1,5 +1,8 @@
 package com.example.meetingroom.vo;
 
+/**
+ * 登录成功后返回的令牌与用户基本信息，前端保存令牌并在后续请求中携带。
+ */
 public class LoginVO {
 
     /** 访问令牌 */

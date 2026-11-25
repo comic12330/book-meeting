@@ -13,7 +13,9 @@ import java.util.List;
  */
 public interface OperationLogMapper {
 
+    /** 新增一条操作日志 */
     int insert(OperationLog log);
 
+    /** 管理端按条件查询日志，条件为空时返回全部 */
     List<OperationLog> selectByCondition(@Param("query") LogQueryDTO query);
 }

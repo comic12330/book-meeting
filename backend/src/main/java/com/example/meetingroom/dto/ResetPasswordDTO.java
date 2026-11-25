@@ -10,6 +10,7 @@ import javax.validation.constraints.Size;
  */
 public class ResetPasswordDTO {
 
+    /** 管理员指定的新密码 */
     @NotBlank(message = "请输入新密码")
     @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH,
             message = "密码长度需在 6-32 位之间")

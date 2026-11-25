@@ -2,6 +2,9 @@ package com.example.meetingroom.entity;
 
 import java.time.LocalDateTime;
 
+/**
+ * 公告，对应 notice 表，字段与表列一一对应。
+ */
 public class Notice {
 
     /** 主键 */

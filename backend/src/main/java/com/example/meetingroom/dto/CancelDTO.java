@@ -10,6 +10,7 @@ import javax.validation.constraints.Size;
  */
 public class CancelDTO {
 
+    /** 取消理由，会展示给被取消预定的人 */
     @NotBlank(message = "请填写取消理由")
     @Size(max = 255, message = "取消理由不能超过 255 字")
     private String reason;

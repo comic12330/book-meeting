@@ -7,8 +7,10 @@ import java.util.List;
  */
 public class PageResult<T> {
 
+    /** 符合条件的总条数，前端用来算总页数 */
     private long total;
 
+    /** 当前页的数据 */
     private List<T> list;
 
     public PageResult() {
@@ -19,6 +21,7 @@ public class PageResult<T> {
         this.list = list;
     }
 
+    /** 按总条数与当前页数据构造分页结果 */
     public static <T> PageResult<T> of(long total, List<T> list) {
         return new PageResult<>(total, list);
     }

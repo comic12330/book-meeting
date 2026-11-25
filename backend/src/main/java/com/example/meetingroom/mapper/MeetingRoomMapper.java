@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * 会议室表的数据访问接口，SQL 语句写在 MeetingRoomMapper.xml 中。
+ */
 public interface MeetingRoomMapper {
 
     /** 条件查询，条件为空时返回全部；status 是否限定由调用方决定 */

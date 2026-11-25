@@ -2,6 +2,9 @@ package com.example.meetingroom.entity;
 
 import java.time.LocalDateTime;
 
+/**
+ * 预定记录，对应 meeting_book 表，字段与表列一一对应。
+ */
 public class MeetingBook {
 
     /** 主键 */

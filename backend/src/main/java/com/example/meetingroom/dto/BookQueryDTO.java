@@ -2,6 +2,9 @@ package com.example.meetingroom.dto;
 
 import com.example.meetingroom.common.PageQuery;
 
+/**
+ * 管理端预定列表的查询条件，分页参数来自父类 PageQuery。
+ */
 public class BookQueryDTO extends PageQuery {
 
     /** 预定状态，不传表示全部 */

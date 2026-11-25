@@ -15,6 +15,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @MapperScan("com.example.meetingroom.mapper")
 public class MeetingRoomApplication {
 
+    /** 启动入口，内置 Tomcat 监听 8080 端口 */
     public static void main(String[] args) {
         SpringApplication.run(MeetingRoomApplication.class, args);
     }

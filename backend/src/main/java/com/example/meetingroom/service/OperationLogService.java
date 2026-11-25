@@ -25,6 +25,7 @@ public class OperationLogService {
     @Resource
     private OperationLogMapper logMapper;
 
+    /** 写入一条操作日志，独立事务提交，调用方事务回滚不影响这条记录 */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void record(OperationLog log) {
         logMapper.insert(log);

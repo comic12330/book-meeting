@@ -427,6 +427,7 @@ class BookServiceTest {
         return LocalDate.now().plusDays(1).atTime(hour, 0);
     }
 
+    /** 构造一个会议室，容量与启用状态由用例指定 */
     private MeetingRoom room(int capacity, int status) {
         MeetingRoom room = new MeetingRoom();
         room.setId(ROOM_ID);
@@ -437,6 +438,7 @@ class BookServiceTest {
         return room;
     }
 
+    /** 构造一份合法的预定表单，用途字段故意带首尾空格，用于验证提交时会去空格 */
     private BookSubmitDTO dto(LocalDateTime start, LocalDateTime end, int participants) {
         BookSubmitDTO dto = new BookSubmitDTO();
         dto.setRoomId(ROOM_ID);
@@ -447,6 +449,7 @@ class BookServiceTest {
         return dto;
     }
 
+    /** 构造审核表单，status 为 1 表示通过、2 表示驳回 */
     private AuditDTO auditDto(int status, String msg) {
         AuditDTO dto = new AuditDTO();
         dto.setStatus(status);
@@ -454,6 +457,7 @@ class BookServiceTest {
         return dto;
     }
 
+    /** 构造一条待审核的预定记录，供审核与取消相关用例使用 */
     private MeetingBook pendingBook(LocalDateTime start, LocalDateTime end) {
         MeetingBook book = new MeetingBook();
         book.setId(BOOK_ID);

@@ -5,6 +5,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * 系统参数表的数据访问接口，SQL 语句写在 SysConfigMapper.xml 中。
+ */
 public interface SysConfigMapper {
 
     /** 取全部参数，按 sort_no 升序 */

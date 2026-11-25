@@ -5,6 +5,7 @@ package com.example.meetingroom.common;
  */
 public final class UserContext {
 
+    /** 每个请求线程各存一份登录用户，必须在请求结束时清理 */
     private static final ThreadLocal<LoginUser> HOLDER = new ThreadLocal<>();
 
     private UserContext() {
